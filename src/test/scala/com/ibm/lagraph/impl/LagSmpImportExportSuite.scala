@@ -28,10 +28,10 @@ class LagSmpImportExportSuite extends FunSuite with Matchers {
 
   test("LagSmpContext.mFromMap Empty") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val sparseValue = 0.0
     val mMap = Map[(Long, Long), Double]()
-    val m = hc.mFromMap[Double](mMap, sparseValue)
+    val m = hc.mFromMap[Double]((nv, nv), mMap, sparseValue)
     val (mMapRes1, sv1) = hc.mToMap(m)
     //    println("mMapRes1: >%s<, sv1: >%s<".format(mMapRes1, sv1))
 //    assert(mMapRes1.isInstanceOf[Map[(Int, Int), Double]])
@@ -45,7 +45,7 @@ class LagSmpImportExportSuite extends FunSuite with Matchers {
 //    assert(sv2.isInstanceOf[Double])
 //    assert(sv2 == sparseValue)
     val (vvm, vvs) = hc.mToMap(m)
-    val mMapRes3 = LagContext.vectorOfVectorFromMap(vvm, vvs, (nv, nv))
+    val mMapRes3 = LagContext.vectorOfVectorFromMap((nv, nv), vvm, vvs)
     //    println("mMapRes3: >%s<".format(mMapRes3))
     assert(mMapRes3.isInstanceOf[Vector[Vector[Double]]])
     assert(mMapRes3.size == nv)
@@ -57,11 +57,11 @@ class LagSmpImportExportSuite extends FunSuite with Matchers {
   }
   test("LagSmpContext.mFromMap Sparse") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val sparseValue = 0.0
     val singleValue = 99.0
     val mMap = Map[(Long, Long), Double]((1L, 2L) -> singleValue)
-    val m = hc.mFromMap[Double](mMap, sparseValue)
+    val m = hc.mFromMap[Double]((nv, nv), mMap, sparseValue)
     val (mMapRes1, sv1) = hc.mToMap(m)
     //    println("mMapRes1: >%s<, sv1: >%s<".format(mMapRes1, sv1))
 //    assert(mMapRes1.isInstanceOf[Map[(Int, Int), Double]])
@@ -77,7 +77,7 @@ class LagSmpImportExportSuite extends FunSuite with Matchers {
 //    assert(sv2.isInstanceOf[Double])
 //    assert(sv2 == sparseValue)
     val (vvm, vvs) = hc.mToMap(m)
-    val mMapRes3 = LagContext.vectorOfVectorFromMap(vvm, vvs, (nv, nv))
+    val mMapRes3 = LagContext.vectorOfVectorFromMap((nv, nv), vvm, vvs)
     //    println("mMapRes3: >%s<".format(mMapRes3))
     assert(mMapRes3.isInstanceOf[Vector[Vector[Double]]])
     assert(mMapRes3.size == nv)
@@ -93,7 +93,7 @@ class LagSmpImportExportSuite extends FunSuite with Matchers {
   }
   test("LagSmpContext.mFromMap Dense") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val sparseValue = 0.0
     val rSparseIndex = 0
     val cSparseIndex = 0
@@ -107,7 +107,7 @@ class LagSmpImportExportSuite extends FunSuite with Matchers {
         ((r.toLong, c.toLong), (r * nv + c).toDouble)
       }
     }.flatten: _*)
-    val m = hc.mFromMap[Double](mMap, sparseValue)
+    val m = hc.mFromMap[Double]((nv, nv), mMap, sparseValue)
     val (mMapRes1, sv1) = hc.mToMap(m)
     //    println("mMapRes1: >%s<, sv1: >%s<".format(mMapRes1, sv1))
 //    assert(mMapRes1.isInstanceOf[Map[(Int, Int), Double]])
@@ -132,7 +132,7 @@ class LagSmpImportExportSuite extends FunSuite with Matchers {
 //    assert(sv2.isInstanceOf[Double])
 //    assert(sv2 == sparseValue)
     val (vvm, vvs) = hc.mToMap(m)
-    val mMapRes3 = LagContext.vectorOfVectorFromMap(vvm, vvs, (nv, nv))
+    val mMapRes3 = LagContext.vectorOfVectorFromMap((nv, nv), vvm, vvs)
     //    println("mMapRes3: >%s<".format(mMapRes3))
     assert(mMapRes3.isInstanceOf[Vector[Vector[Double]]])
     assert(mMapRes3.size == nv)
@@ -339,10 +339,10 @@ class LagSmpImportExportSuite extends FunSuite with Matchers {
 //  }
   test("LagSmpContext.vFromMap Empty") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val sparseValue = 0.0
     val vMap = Map[Long, Double]()
-    val v = hc.vFromMap[Double](vMap, sparseValue)
+    val v = hc.vFromMap[Double](nv, vMap, sparseValue)
     val (vMapRes1, sv1) = hc.vToMap(v)
 //    println("vMapRes1: >%s<, sv1: >%s<".format(vMapRes1, sv1))
 //    assert(vMapRes1.isInstanceOf[Map[Int, Double]])
@@ -359,11 +359,11 @@ class LagSmpImportExportSuite extends FunSuite with Matchers {
   }
   test("LagSmpContext.vFromMap Sparse") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val sparseValue = 0.0
     val singleValue = 99.0
     val vMap = Map[Long, Double](2L -> singleValue)
-    val v = hc.vFromMap[Double](vMap, sparseValue)
+    val v = hc.vFromMap[Double](nv, vMap, sparseValue)
     val (vMapRes1, sv1) = hc.vToMap(v)
     //    println("vMapRes1: >%s<, sv1: >%s<".format(vMapRes1, sv1))
 //    assert(vMapRes1.isInstanceOf[Map[Int, Double]])
@@ -382,13 +382,13 @@ class LagSmpImportExportSuite extends FunSuite with Matchers {
   }
   test("LagSmpContext.vFromMap Dense") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val sparseValue = 0.0
     val sparseIndex = 0
     val vMap = Map((0 until nv).map { r =>
       (r.toLong, r.toDouble)
     }: _*)
-    val v = hc.vFromMap[Double](vMap, sparseValue)
+    val v = hc.vFromMap[Double](nv, vMap, sparseValue)
     val (vMapRes1, sv1) = hc.vToMap(v)
     //    println("vMapRes1: >%s<, sv1: >%s<".format(vMapRes1, sv1))
 //    assert(vMapRes1.isInstanceOf[Map[Int, Double]])

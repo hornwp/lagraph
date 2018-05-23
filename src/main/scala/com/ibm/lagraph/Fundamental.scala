@@ -80,9 +80,10 @@ object Fundamental {
 
     // obtain a distributed context for Spark environment
     val nblock = 1 // set parallelism (blocks on one axis)
-    val hc = LagContext.getLagDstrContext(sc, numv, nblock)
+    val hc = LagContext.getLagDstrContext(sc, nblock)
 
-    println("Input graph: >\n%s<".format(hc.mFromRcvRdd(rcvGraph, 0.0F).toString(float2Str)))
+    println("Input graph: >\n%s<".format(
+        hc.mFromRcvRdd((numv, numv), rcvGraph, 0.0F).toString(float2Str)))
 
     //    // ********
     //    // Floyd-Warshall: Distance-only Semirings: Initialize: 1st Pass
@@ -173,7 +174,7 @@ object Fundamental {
       if (kv._1._1 == kv._1._2) None else Some(eInit(kv))
     }
     // use distributed context-specific utility to convert from RDD to LagMatrix
-    val mAdj = hc.mFromRcvRdd(rcvAdj, PathNopPlusSr.zero)
+    val mAdj = hc.mFromRcvRdd((numv, numv), rcvAdj, PathNopPlusSr.zero)
     println("mAdj: >\n%s<".format(mAdj.toString(d2Str)))
 
     // ********
@@ -247,9 +248,10 @@ object Fundamental {
 
     // obtain a distributed context for Spark environment
     val nblock = 1 // set parallelism (blocks on one axis)
-    val hc = LagContext.getLagDstrContext(sc, numv.toInt, nblock)
+    val hc = LagContext.getLagDstrContext(sc, nblock)
 
-    println("Input graph: >\n%s<".format(hc.mFromRcvRdd(rcvGraph, 0.0F).toString(float2Str)))
+    println("Input graph: >\n%s<".format(
+        hc.mFromRcvRdd((numv, numv), rcvGraph, 0.0F).toString(float2Str)))
 
     // ********
     // Prim's: Path-augmented Semiring: Initialization
@@ -332,7 +334,7 @@ object Fundamental {
       ((i, i), PrimSemiring.zero)
     })
     // use distributed context-specific utility to convert from RDD to LagMatrix
-    val mAdj = hc.mFromRcvRdd(rcvAdj, Tuple2(FloatInf, NodeNil))
+    val mAdj = hc.mFromRcvRdd((numv, numv), rcvAdj, Tuple2(FloatInf, NodeNil))
     //    // ****************
     //    val mAdjIn = hc.mFromRcvRdd(rcvGraph, 0.0F)
     //    // initialize adjacency matrix
@@ -351,11 +353,11 @@ object Fundamental {
     val source = 0L
 
     // initial membership in spanning tree set
-    val s_initial = hc.vReplicate(0.0F).set(source, FloatInf)
+    val s_initial = hc.vReplicate(numv, 0.0F).set(source, FloatInf)
     println("s_initial: >\n%s<".format(s_initial.toString(float2Str)))
 
     // initial membership in spanning tree set
-    val s_final_test = hc.vReplicate(FloatInf)
+    val s_final_test = hc.vReplicate(numv, FloatInf)
     println("s_final_test: >\n%s<".format(s_final_test.toString(float2Str)))
     //    s_final_test.asInstanceOf[LagDstrVector[PrimTreeType]].dstrBvec.vecRdd.collect.foreach
     //      { case (k, v) => println("s_final_test: (%s,%s): %s".format(k._1, k._2, v)) }
@@ -363,7 +365,7 @@ object Fundamental {
     val d_initial = mAdj.vFromRow(0)
     println("d_initial: >\n%s<".format(d_initial.toString(primType2Str)))
 
-    val pi_initial = hc.vReplicate(NodeNil)
+    val pi_initial = hc.vReplicate(numv, NodeNil)
     println("pi_initial: >\n%s<".format(pi_initial.toString(long2Str)))
 
     @tailrec
@@ -470,9 +472,10 @@ object Fundamental {
 
     // obtain a distributed context for Spark environment
     val nblock = 1 // set parallelism (blocks on one axis)
-    val hc = LagContext.getLagDstrContext(sc, numv, nblock)
+    val hc = LagContext.getLagDstrContext(sc, nblock)
 
-    println("Input graph: >\n%s<".format(hc.mFromRcvRdd(rcvGraph, 0.0F).toString(float2Str)))
+    println("Input graph: >\n%s<".format(hc.mFromRcvRdd((numv, numv),
+        rcvGraph, 0.0F).toString(float2Str)))
 
     // ********
     // Bellman-Ford: Distance-only Semiring: Initialization: 1st Pass
@@ -560,7 +563,7 @@ object Fundamental {
     })
 
     // use distributed context-specific utility to convert from RDD to LagMatrix
-    val mAdj = hc.mFromRcvRdd(rcvAdj, PathMinPlusSr.zero)
+    val mAdj = hc.mFromRcvRdd((numv, numv), rcvAdj, PathMinPlusSr.zero)
 
     println("mAdj: >\n%s<".format(mAdj.toString(d2Str)))
 
@@ -569,7 +572,7 @@ object Fundamental {
     def dInit(di: PathType, ui: Long): PathType =
       if (ui == source) PathMinPlusSr.one else di
     val d_prev = hc
-      .vReplicate(PathMinPlusSr.zero)
+      .vReplicate(numv, PathMinPlusSr.zero)
       .zipWithIndex(dInit, Option(PathMinPlusSr.zero))
     println("d_initial: >\n%s<".format(d_prev.toString(d2Str)))
 

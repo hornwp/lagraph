@@ -36,17 +36,18 @@ import com.ibm.lagraph.impl.{LagSmpVector, LagSmpMatrix}
   *  Matrices and vectors in one context cannot be mixed with matrices and
   *  vectors in a different context.
   */
-final case class LagSmpContext(override val graphSize: Long) extends LagContext {
+final case class LagSmpContext() extends LagContext {
 
   // *****
   // import / export
-  // these are require specialized contexts may offer additional methods
-  override def vFromMap[T: ClassTag](m: Map[Long, T], sparseValue: T): LagVector[T] = {
+  // these are required specialized contexts may offer additional methods
+  override def vFromMap[T: ClassTag](nrow: Long, m: Map[Long, T], sparseValue: T): LagVector[T] = {
+    require(nrow > 0, "vector nrow: >%s< must be > 0".format(nrow))
     val mtoint = m.map { case (k, v) => (k.toInt -> v) }
-    LagSmpVector(this, GpiAdaptiveVector.fromMap(mtoint, sparseValue, graphSize.toInt))
+    LagSmpVector(this, GpiAdaptiveVector.fromMap(mtoint, sparseValue, nrow.toInt))
   }
   override def vFromSeq[T: ClassTag](v: Seq[T], sparseValue: T): LagVector[T] = {
-    assert(v.size == graphSize)
+//    assert(v.size == graphSize)
     LagSmpVector(this, GpiAdaptiveVector.fromSeq(v, sparseValue))
   }
   private[lagraph] override def vToMap[T: ClassTag](v: LagVector[T]): (Map[Long, T], T) = v match {
@@ -59,11 +60,15 @@ final case class LagSmpContext(override val graphSize: Long) extends LagContext 
     case va: LagSmpVector[T] =>
       GpiAdaptiveVector.toVector(va.v)
   }
-  override def mFromMap[T: ClassTag](mMap: Map[(Long, Long), T], sparseValue: T): LagMatrix[T] = {
-    val nrow = graphSize
-    val ncol = graphSize
+  override def mFromMap[T: ClassTag](size: (Long, Long),
+                                     mMap: Map[(Long, Long), T], sparseValue: T): LagMatrix[T] = {
+    require(size._1 > 0 && size._2 > 0,
+        "matrix size: >(%s, %s)< must be > (0, 0)".format(size._1, size._2))
+    val (nrow, ncol) = size
     val mtoint = mMap.map { case (k, v) => ((k._1.toInt, k._2.toInt) -> v) }
     LagSmpMatrix(this,
+                 nrow,
+                 ncol,
                  mMap,
                  GpiSparseRowMatrix.fromMap(mtoint, sparseValue, nrow.toInt, ncol.toInt))
   }
@@ -89,26 +94,38 @@ final case class LagSmpContext(override val graphSize: Long) extends LagContext 
   // ****************
   // ****************
   // factory
-  override def vIndices(start: Long = 0L, sparseValueOpt: Option[Long] = None): LagVector[Long] = {
-    LagSmpVector(this, GpiOps.gpi_indices(graphSize, start))
+  override def vIndices(nrow: Long, start: Long = 0L,
+                        sparseValueOpt: Option[Long] = None): LagVector[Long] = {
+    require(nrow > 0, "vector nrow: >%s< must be > 0".format(nrow))
+    LagSmpVector(this, GpiOps.gpi_indices(nrow, start))
   }
-  override def vReplicate[T: ClassTag](x: T, sparseValueOpt: Option[T] = None): LagVector[T] = {
-    LagSmpVector(this, GpiOps.gpi_replicate(graphSize, x, sparseValueOpt))
+  override def vReplicate[T: ClassTag](nrow: Long, x: T,
+                                       sparseValueOpt: Option[T] = None): LagVector[T] = {
+    require(nrow > 0, "vector nrow: >%s< must be > 0".format(nrow))
+    LagSmpVector(this, GpiOps.gpi_replicate(nrow, x, sparseValueOpt))
   }
   // experimental
-  override def mIndices(start: (Long, Long)): LagMatrix[(Long, Long)] = {
+  override def mIndices(size: (Long, Long), start: (Long, Long)): LagMatrix[(Long, Long)] = {
+    require(size._1 > 0 && size._2 > 0,
+        "matrix size: >(%s, %s)< must be > (0, 0)".format(size._1, size._2))
     require(start._1 > 0)
-    val end = (start._1 + graphSize, start._2 + graphSize)
-    mFromMap[(Long, Long)](Map((start._1 until end._1).map { r =>
+    val (nrow, ncol) = size
+//    val end = (start._1 + graphSize, start._2 + graphSize)
+    val end = (start._1 + nrow, start._2 + ncol)
+    mFromMap[(Long, Long)](size,
+                           Map((start._1 until end._1).map { r =>
       (start._2 until end._2).map { c =>
         ((r - start._1, c - start._1), (r, c))
       }
     }.flatten: _*), (0, 0))
   }
   // experimental
-  override def mReplicate[T: ClassTag](x: T): LagMatrix[T] = {
-    val size = (graphSize, graphSize)
-    mFromMap[T](Map((0L until size._1).map { r =>
+  override def mReplicate[T: ClassTag](size: (Long, Long), x: T): LagMatrix[T] = {
+    require(size._1 > 0 && size._2 > 0,
+        "matrix size: >(%s, %s)< must be > (0, 0)".format(size._1, size._2))
+    val (nrow, ncol) = size
+    mFromMap[T](size,
+                Map((0L until size._1).map { r =>
       (0L until size._2).map { c =>
         ((r, c), x)
       }
@@ -162,7 +179,8 @@ final case class LagSmpContext(override val graphSize: Long) extends LagContext 
     m match {
       case ma: LagSmpMatrix[_] => {
         val sparseValue = f(ma.vov(0).sparseValue)
-        mFromMap(ma.rcvMap.map { case (k, v) => (k, f(v)) }.filter {
+        mFromMap(ma.size,
+                 ma.rcvMap.map { case (k, v) => (k, f(v)) }.filter {
           case (k, v) => v != sparseValue
         }, sparseValue)
       }
@@ -179,14 +197,15 @@ final case class LagSmpContext(override val graphSize: Long) extends LagContext 
       val mapZip = GpiSparseRowMatrix.toMap(vovZip).map {
         case (k, v) => ((k._1.toLong, k._2.toLong) -> v)
       }
-      LagSmpMatrix(this, mapZip, vovZip)
+      LagSmpMatrix(this, m.size._1, m.size._2, mapZip, vovZip)
     }
   }
   private[lagraph] override def mZipWithIndex[T1: ClassTag, T2: ClassTag](
       f: (T1, (Long, Long)) => T2,
       m: LagMatrix[T1]): LagMatrix[T2] = m match {
     case ma: LagSmpMatrix[T1] => {
-      mFromMap(ma.rcvMap.map { case (k, v) => (k, f(v, k)) }, f(ma.vov(0).sparseValue, (0, 0)))
+      mFromMap(m.size,
+               ma.rcvMap.map { case (k, v) => (k, f(v, k)) }, f(ma.vov(0).sparseValue, (0, 0)))
     }
   }
   private[lagraph] override def mSparseZipWithIndex[T1: ClassTag, T2: ClassTag](
@@ -203,7 +222,8 @@ final case class LagSmpContext(override val graphSize: Long) extends LagContext 
           case (k, v) => if (k._1 != k._2) Some((k, v)) else None
         } ++ diagSeq).toMap
       } else ma.rcvMap
-      mFromMap(rcvMap.map { case (k, v) => (k, f(v, k)) }, targetSparseValue)
+      mFromMap(ma.size,
+               rcvMap.map { case (k, v) => (k, f(v, k)) }, targetSparseValue)
     }
   }
   // *****
@@ -257,7 +277,7 @@ final case class LagSmpContext(override val graphSize: Long) extends LagContext 
       val mapMtM = GpiSparseRowMatrix.toMap(vovMtM).map {
         case (k, v) => ((k._1.toLong, k._2.toLong) -> v)
       }
-      LagSmpMatrix(this, mapMtM, vovMtM).transpose
+      LagSmpMatrix(this, m.size._1, n.size._2, mapMtM, vovMtM).transpose
     }
   }
   // Hadagard ".multiplication"
@@ -293,7 +313,7 @@ final case class LagSmpContext(override val graphSize: Long) extends LagContext 
           case (p1, p2) =>
             Tuple2(Tuple2(p1._1, p2._1), f.multiplication.op(p1._2, p2._2))
         }.toMap
-        mFromMap(rcvMap, sparseValue)
+        mFromMap(m.size, rcvMap, sparseValue)
       }
     }
 
@@ -308,7 +328,8 @@ final case class LagSmpContext(override val graphSize: Long) extends LagContext 
   private[lagraph] override def mTranspose[T: ClassTag](m: LagMatrix[T]): LagMatrix[T] = m match {
     case ma: LagSmpMatrix[_] => {
       val sparseValue = ma.vov(0).sparseValue
-      mFromMap(ma.rcvMap.map { case (k, v) => ((k._2, k._1), v) }, sparseValue)
+      mFromMap(m.size,
+               ma.rcvMap.map { case (k, v) => ((k._2, k._1), v) }, sparseValue)
     }
   }
   private[lagraph] def vFromMrow[T: ClassTag](m: LagMatrix[T], mRow: Long): LagVector[T] =
@@ -319,7 +340,7 @@ final case class LagSmpContext(override val graphSize: Long) extends LagContext 
   private[lagraph] def vFromMcol[T: ClassTag](m: LagMatrix[T], mCol: Long): LagVector[T] =
     m match {
       case ma: LagSmpMatrix[_] =>
-        vFromMap(ma.rcvMap.filter { case (k, v) => k._2 == mCol }.map {
+        vFromMap(ma.size._1, ma.rcvMap.filter { case (k, v) => k._2 == mCol }.map {
           case (k, v) => (k._1, v)
         }, ma.vov(0).sparseValue)
     }
@@ -331,5 +352,12 @@ final case class LagSmpContext(override val graphSize: Long) extends LagContext 
       case (ua: LagSmpVector[T], va: LagSmpVector[T]) => {
         GpiOps.gpi_equiv(ua.v, va.v)
       }
+    }
+  // *******
+  // diagnostics
+  def mDiagnose[T: ClassTag](m: LagMatrix[T]): Unit =
+    m match {
+      case ma: LagSmpMatrix[T] =>
+        {}
     }
 }

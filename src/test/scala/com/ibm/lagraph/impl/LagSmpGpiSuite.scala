@@ -34,17 +34,17 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
 //  }
   test("LagSmpContext.mHm") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val nr = nv
     val nc = nv
     val sparseValue = 0.0
     val mA =
-      hc.mFromMap(
+      hc.mFromMap((nr, nc),
         LagContext.mapFromSeqOfSeq(Vector.tabulate(nr, nc)((r, c) => (r * nc + c).toDouble),
                                    sparseValue),
         sparseValue)
     val mB =
-      hc.mFromMap(
+      hc.mFromMap((nr, nc),
         LagContext.mapFromSeqOfSeq(Vector.tabulate(nr, nc)((r, c) => (r * nc + c).toDouble),
                                    sparseValue),
         sparseValue)
@@ -60,7 +60,7 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
     val mHm = hc.mHm(_mul, mA, mB)
 
     val (vvm, vvs) = hc.mToMap(mHm)
-    val mHmRes = LagContext.vectorOfVectorFromMap(vvm, vvs, (nr, nc))
+    val mHmRes = LagContext.vectorOfVectorFromMap((nr, nc), vvm, vvs)
 
     (0 until nr).map { r =>
       (0 until nc).map { c =>
@@ -83,14 +83,14 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
   }
   test("LagSmpContext.mOp") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val sparseValue = 0.0
     val nA = Vector.tabulate(nv, nv)((r, c) => (r * nv + c).toDouble)
     val nB = Vector.tabulate(nv, nv)((r, c) => (r * nv + c).toDouble)
     val mA =
-      hc.mFromMap(LagContext.mapFromSeqOfSeq(nA, sparseValue), sparseValue)
+      hc.mFromMap((nv, nv), LagContext.mapFromSeqOfSeq(nA, sparseValue), sparseValue)
     val mB =
-      hc.mFromMap(LagContext.mapFromSeqOfSeq(nB, sparseValue), sparseValue)
+      hc.mFromMap((nv, nv), LagContext.mapFromSeqOfSeq(nB, sparseValue), sparseValue)
     //    }
     val _mul = LagSemiring.plus_times[Double]
 
@@ -108,7 +108,7 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
         {
           val mOp = hc.mOp(_mul, mA, oc.toLong, mB, or.toLong)
           val (vvm, vvs) = hc.mToMap(mOp)
-          val mOpRes = LagContext.vectorOfVectorFromMap(vvm, vvs, (nv, nv))
+          val mOpRes = LagContext.vectorOfVectorFromMap((nv, nv), vvm, vvs)
           val mOpAct = outerproduct(nA, oc, nB, or)
           (0 until nv).map { r =>
             (0 until nv).map { c =>
@@ -122,12 +122,12 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
 
   test("LagSmpContext.mMap") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val nr = nv
     val nc = nv
     val sparseValue = 0.0
     val mA =
-      hc.mFromMap(
+      hc.mFromMap((nv, nv),
         LagContext.mapFromSeqOfSeq(Vector.tabulate(nr, nc)((r, c) => (r * nc + c).toDouble),
                                    sparseValue),
         sparseValue)
@@ -136,7 +136,7 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
     val mMap = hc.mMap(f, mA)
 
     val (vvm, vvs) = hc.mToMap(mMap)
-    val mMapRes = LagContext.vectorOfVectorFromMap(vvm, vvs, (nr, nc))
+    val mMapRes = LagContext.vectorOfVectorFromMap((nr, nc), vvm, vvs)
 
     (0 until nr).map { r =>
       (0 until nc).map { c =>
@@ -160,7 +160,7 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
 
   test("LagSmpContext.mTm nr == nc") {
     val graphSize = 10
-    val hc: LagContext = LagContext.getLagSmpContext(graphSize)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val nv = graphSize
 
     val nr = nv
@@ -169,18 +169,18 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
     val nB = Vector.tabulate(nv, nv)((r, c) => r * nv + c + 101.0)
     val sparseValue = 0.0
     val mA =
-      hc.mFromMap(LagContext.mapFromSeqOfSeq(nA, sparseValue), sparseValue)
+      hc.mFromMap((nr, nc), LagContext.mapFromSeqOfSeq(nA, sparseValue), sparseValue)
     val mB =
-      hc.mFromMap(LagContext.mapFromSeqOfSeq(nB, sparseValue), sparseValue)
+      hc.mFromMap((nr, nc), LagContext.mapFromSeqOfSeq(nB, sparseValue), sparseValue)
     val sr = LagSemiring.plus_times[Double]
     val mTmRes = hc.mTm(sr, mA, mB)
 
     val resScala = mult(nA, nB)
     assert(
       toArray(LagContext.vectorOfVectorFromMap(
-        hc.mToMap(mTmRes)._1,
-        sparseValue,
-        (nv.toLong, nv.toLong))).deep == toArray(resScala).deep)
+          (nv.toLong, nv.toLong),
+          hc.mToMap(mTmRes)._1,
+          sparseValue)).deep == toArray(resScala).deep)
 
   }
 
@@ -222,10 +222,10 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
 
   test("LagSmpContext.mTv") {
     val nv = 3
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val sparseValueInt = 0
     val mv = Vector.tabulate(nv, nv)((r, c) => c * nv + r)
-    val m = hc.mFromMap(LagContext.mapFromSeqOfSeq(mv, sparseValueInt), sparseValueInt)
+    val m = hc.mFromMap((nv, nv), LagContext.mapFromSeqOfSeq(mv, sparseValueInt), sparseValueInt)
     val v = hc.vFromSeq(Range(0, nv).toVector, sparseValueInt)
     //    object add_mul extends LagSemiring[Int] {
     //      override val addition = (x: Int, y: Int) => x + y
@@ -268,12 +268,12 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
 
   test("LagSmpContext.mSparseZipWithIndex") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val nr = nv
     val nc = nv
     val sparseValueDouble = 0.0
     val mA =
-      hc.mFromMap(
+      hc.mFromMap((nr, nc),
         LagContext.mapFromSeqOfSeq(Vector.tabulate(nr, nc)((r, c) => (r * nc + c).toDouble),
                                    sparseValueDouble),
         sparseValueDouble)
@@ -283,7 +283,7 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
       hc.mSparseZipWithIndex(f, mA, Tuple2(sparseValueDouble, (0L, 0L)))
 
     val (vvm, vvs) = hc.mToMap(mSparseZipWithIndex)
-    val mZipWithIndexRes = LagContext.vectorOfVectorFromMap(vvm, vvs, (nr, nc))
+    val mZipWithIndexRes = LagContext.vectorOfVectorFromMap((nr, nc), vvm, vvs)
 
     (0 until nr).map { r =>
       (0 until nc).map { c =>
@@ -296,9 +296,9 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
   }
   test("LagSmpContext.vMap 1") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val size = nv
-    val u = hc.vReplicate(1)
+    val u = hc.vReplicate(nv, 1)
     val f = (a: Int) => a.toDouble * 2.0
     val v = hc.vMap(f, u)
     val vRes = hc.vToVector(v)
@@ -309,9 +309,9 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
   }
   test("LagSmpContext.vMap 2") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val size = nv
-    val u = hc.vIndices(0)
+    val u = hc.vIndices(nv, 0)
     val f = (a: Long) => a.toDouble * 2.0
     val v = hc.vMap(f, u)
     val vRes = hc.vToVector(v)
@@ -322,11 +322,11 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
   }
   test("LagSmpContext.vZip") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val size = nv
     val offset = 100
-    val u = hc.vIndices(0)
-    val v = hc.vIndices(offset)
+    val u = hc.vIndices(nv, 0)
+    val v = hc.vIndices(nv, offset)
     val f = (a: Long, b: Long) => a + b
     val w = hc.vZip(f, u, v)
     val wRes = hc.vToVector(w)
@@ -338,9 +338,9 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
   }
   test("LagSmpContext.vZipWithIndex") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val size = nv
-    val u = hc.vIndices(0)
+    val u = hc.vIndices(nv, 0)
     val f = (a: Long, b: Long) => (a, b)
     val w = hc.vZipWithIndex(f, u)
     val wRes = hc.vToVector(w)
@@ -353,10 +353,10 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
   test("LagSmpContext.vEquiv eq indices") {
     val offset = 0
     for (graphSize <- List(16, 32)) {
-      val hc: LagContext = LagContext.getLagSmpContext(graphSize)
+      val hc: LagContext = LagContext.getLagSmpContext()
       // vectors
-      val u = hc.vIndices(0)
-      val v = hc.vIndices(offset)
+      val u = hc.vIndices(graphSize, 0)
+      val v = hc.vIndices(graphSize, offset)
       assert(hc.vEquiv(u, v))
       assert(hc.vEquiv(v, u))
     }
@@ -364,10 +364,10 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
   test("LagSmpContext.vEquiv ne indices") {
     val offset = 100
     for (graphSize <- List(16, 32)) {
-      val hc: LagContext = LagContext.getLagSmpContext(graphSize)
+      val hc: LagContext = LagContext.getLagSmpContext()
       // vectors
-      val u = hc.vIndices(0)
-      val v = hc.vIndices(offset)
+      val u = hc.vIndices(graphSize, 0)
+      val v = hc.vIndices(graphSize, offset)
       assert(!hc.vEquiv(u, v))
       assert(!hc.vEquiv(v, u))
     }
@@ -375,10 +375,10 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
   test("LagSmpContext.vEquiv eq replicate") {
     val constant = 0
     for (graphSize <- List(16, 32)) {
-      val hc: LagContext = LagContext.getLagSmpContext(graphSize)
+      val hc: LagContext = LagContext.getLagSmpContext()
       // vectors
-      val u = hc.vReplicate(constant)
-      val v = hc.vReplicate(constant)
+      val u = hc.vReplicate(graphSize, constant)
+      val v = hc.vReplicate(graphSize, constant)
       assert(hc.vEquiv(u, v))
       assert(hc.vEquiv(v, u))
     }
@@ -386,10 +386,10 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
   test("LagSmpContext.vEquiv ne replicate") {
     val constant = 100
     for (graphSize <- List(16, 32)) {
-      val hc: LagContext = LagContext.getLagSmpContext(graphSize)
+      val hc: LagContext = LagContext.getLagSmpContext()
       // vectors
-      val u = hc.vReplicate(0)
-      val v = hc.vReplicate(constant)
+      val u = hc.vReplicate(graphSize, 0)
+      val v = hc.vReplicate(graphSize, constant)
       assert(!hc.vEquiv(u, v))
       assert(!hc.vEquiv(v, u))
     }
@@ -397,10 +397,10 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
   test("LagSmpContext.vEquiv 7") {
     val constant = 7
     for (graphSize <- List(8, 16, 32)) {
-      val hc: LagContext = LagContext.getLagSmpContext(graphSize)
+      val hc: LagContext = LagContext.getLagSmpContext()
       // vectors
-      val u = hc.vReplicate(constant)
-      val v = hc.vReplicate(constant)
+      val u = hc.vReplicate(graphSize, constant)
+      val v = hc.vReplicate(graphSize, constant)
       assert(hc.vEquiv(u, v))
       assert(hc.vEquiv(v, u))
     }
@@ -408,7 +408,7 @@ class LagSmpGpiSuite extends FunSuite with Matchers {
   test("LagSmpContext.vReduceWithIndex") {
     val sparseValueInt = 0
     for (graphSize <- List(8, 16, 32)) {
-      val hc: LagContext = LagContext.getLagSmpContext(graphSize)
+      val hc: LagContext = LagContext.getLagSmpContext()
 
       val testIndex = 3
       val vTest = Range(0, graphSize).toVector.map { x =>

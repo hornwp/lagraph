@@ -532,7 +532,6 @@ abstract class LagMatrix[T: ClassTag] protected (val hc: LagContext, val size: (
   /**
     * Convert this matrix to a map.
     *
-    *  @param m input matrix.
     *  @return a Tuple2: (map representation of the matrix, sparse value)
     */
   def toMap: (Map[(Long, Long), T], T) =
@@ -692,8 +691,6 @@ abstract class LagMatrix[T: ClassTag] protected (val hc: LagContext, val size: (
   *  The context is used for creating, importing, exporting, and manipulating
   *  matrices and vectors.
   *
-  *  A LAG context defines the dimension of the problem, ie number of vertices.
-  *
   *  A LAG context may be used for any number of matrices and vectors.
   *
   *  Matrices and vectors in one context cannot be mixed with matrices and vectors
@@ -702,29 +699,30 @@ abstract class LagMatrix[T: ClassTag] protected (val hc: LagContext, val size: (
 trait LagContext {
 
   /** The dimension of the Adjacency Matrix will be graphSize X graphSize */
-  val graphSize: Long
   // vector factory
   /**
     * Return a vector with base-0 indices of type Long, optionally offset by start.
     *
     * The resultant vector will possess a sparse value of 0L
     *
+    *  @param nrow number of rows in vector
     *  @param start optional offset
     *  @return resultant vector
     */
-  def vIndices(start: Long = 0L, sparseValueOpt: Option[Long] = None): LagVector[Long]
+  def vIndices(nrow: Long, start: Long = 0L, sparseValueOpt: Option[Long] = None): LagVector[Long]
 
   /**
     * Return a vector, where every element has a value of x.
     *
     *  @tparam T the type of the elements in the vector
     *
+    *  @param nrow number of rows in vector
     *  @param x value for assignment
     *  @param sparseValueOpt option to control sparsity of resultant vector, if not specified
     *         x will be used
     *  @return resultant vector
     */
-  def vReplicate[T: ClassTag](x: T, sparseValueOpt: Option[T] = None): LagVector[T]
+  def vReplicate[T: ClassTag](nrow: Long, x: T, sparseValueOpt: Option[T] = None): LagVector[T]
   // experimental
   // TODO Do we need this?
   /**
@@ -734,10 +732,11 @@ trait LagContext {
     *
     * The resultant vector will possess a sparse value of 0L
     *
+    *  @param size dimension of matrix (nrow, ncol)
     *  @param start optional (row, column) offset
     *  @return resultant matrix
     */
-  def mIndices(start: (Long, Long)): LagMatrix[(Long, Long)]
+  def mIndices(size: (Long, Long), start: (Long, Long)): LagMatrix[(Long, Long)]
   // experimental
   /**
     * Return a matrix, where every element has a value of x.
@@ -746,12 +745,13 @@ trait LagContext {
     *
     *  @tparam T the type of the elements in the matrix
     *
+    *  @param size dimension of matrix (nrow, ncol)
     *  @param x value for assignment
     *  @param sparseValueOpt option to control sparsity of resultant matrix, if not specified
     *         x will be used
     *  @return resultant matrix
     */
-  def mReplicate[T: ClassTag](x: T): LagMatrix[T]
+  def mReplicate[T: ClassTag](size: (Long, Long), x: T): LagMatrix[T]
 
   // *****
   // import / export
@@ -761,11 +761,13 @@ trait LagContext {
     *
     *  @tparam T the type of the elements in the matrix
     *
+    *  @param size dimension of matrix (nrow, ncol)
     *  @param mMatrix Map[(row[Long],col[Long]), value[T]] representation of a matrix.
     *  @param sparseValue sparse value for unspecified (row, col) pairs.
     *  @return resultant matrix
     */
-  def mFromMap[T: ClassTag](mMatrix: Map[(Long, Long), T], sparseValue: T): LagMatrix[T]
+  def mFromMap[T: ClassTag](size: (Long, Long),
+          mMatrix: Map[(Long, Long), T], sparseValue: T): LagMatrix[T]
 
   /**
     * Convert a matrix to a map.
@@ -782,10 +784,11 @@ trait LagContext {
     *
     *  @tparam T the type of the elements in the vector
     *
+    *  @param nrow number of rows in vector
     *  @param m Map[row[Long], value[T]] representation of a vector.
     *  @return resultant vector
     */
-  def vFromMap[T: ClassTag](m: Map[Long, T], sparseValue: T): LagVector[T]
+  def vFromMap[T: ClassTag](nrow: Long, m: Map[Long, T], sparseValue: T): LagVector[T]
 
   /**
     * Return a vector representing a Scala Seq.
@@ -1073,7 +1076,7 @@ trait LagContext {
     */
   private[lagraph] def mToString[T: ClassTag](m: LagMatrix[T], formatter: (T) => String): String = {
     val (ms, sv) = mToMap(m)
-    LagContext.vectorOfVectorToString(LagContext.vectorOfVectorFromMap(ms, sv, m.size), formatter)
+    LagContext.vectorOfVectorToString(LagContext.vectorOfVectorFromMap(m.size, ms, sv), formatter)
   }
 
   /**
@@ -1087,7 +1090,7 @@ trait LagContext {
     */
   private[lagraph] def vToString[T: ClassTag](v: LagVector[T], formatter: (T) => String): String = {
     val (vs, sv) = vToMap(v)
-    LagContext.vectorToString(LagContext.vectorFromMap(vs, sv, v.size), formatter)
+    LagContext.vectorToString(LagContext.vectorFromMap(v.size, vs, sv), formatter)
   }
 
   /**
@@ -1152,6 +1155,13 @@ trait LagContext {
     (res._1.get, res._2)
   }
 
+  // *******
+  // diagnostics
+  /**
+    * Output Metadata for debug.
+    */
+ def mDiagnose[T: ClassTag](m: LagMatrix[T]): Unit
+
 }
 
 /**
@@ -1164,20 +1174,19 @@ object LagContext {
   /**
     * Creates a lag context that runs in a single JVM
     *
-    *  @param graphSize dimension of the graph
     */
-  def getLagSmpContext(graphSize: Long): LagSmpContext =
-    LagSmpContext(graphSize)
+  def getLagSmpContext(): LagSmpContext =
+    LagSmpContext()
 
   /**
     * Creates a lag context that runs distributively in Spark
     *
     *  @param sc the SparkContext
-    *  @param graphSize dimension of the graph
-    *  @param nblock blocking factor for graph
+    *  @param nblockRequested requested blocking factor for graph
+    *         actualNblock = min(nblockRequested, numberOfVertices)
     */
-  def getLagDstrContext(sc: SparkContext, graphSize: Long, nblock: Int): LagDstrContext =
-    LagDstrContext(sc, graphSize, nblock)
+  def getLagDstrContext(sc: SparkContext, nblockRequested: Int): LagDstrContext =
+    LagDstrContext(sc, nblockRequested)
 
   /**
     * Converts a scala Vector to a string.
@@ -1225,15 +1234,16 @@ object LagContext {
     *
     *  @tparam T the element type of the matrix
     *
+    *  @param size dimension of matrix (nrow, ncol)
     *  @param m the scala map representation of the matrix
     *  @param sparseValue the sparse value of the map representation
     *
     *  @return a new scala Vector of Vectors (outer Vector corresponds to rows and
     *          the inner Vector corresponds to columns) representing the matrix
     */
-  def vectorOfVectorFromMap[T](m: Map[(Long, Long), T],
-                               sparseValue: T,
-                               size: (Long, Long)): Vector[Vector[T]] = {
+  def vectorOfVectorFromMap[T](size: (Long, Long),
+                               m: Map[(Long, Long), T],
+                               sparseValue: T): Vector[Vector[T]] = {
     val nrow = size._1
     val ncol = size._2
     require(nrow < Int.MaxValue, "LagContext type failure")
@@ -1249,12 +1259,13 @@ object LagContext {
     *
     *  @tparam T the element type of the matrix
     *
+    *  @param nrow number of rows in vector
     *  @param m the scala map representation of the vector
     *  @param sparseValue the sparse value of the map representation
     *
     *  @return a new scala Vector representing the vector
     */
-  def vectorFromMap[T](m: Map[Long, T], sparseValue: T, size: Long): Vector[T] = {
+  def vectorFromMap[T](size: Long, m: Map[Long, T], sparseValue: T): Vector[T] = {
     require(size < Int.MaxValue, "LagContext type failure")
     val cl = ArrayBuffer.fill[T](size.toInt)(sparseValue)
     m.map { case (k, v) => cl(k.toInt) = v }

@@ -28,16 +28,16 @@ class LagSmpMechanicSuite extends FunSuite with Matchers {
 
   test("LagSmpContext.mTranspose") {
     val nr = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nr)
+    val hc: LagContext = LagContext.getLagSmpContext()
     var nc = 10
     val vMatrix = Vector.tabulate(nr, nc)((r, c) => (r * nc + c).toDouble)
     val sparseValue = 0.0
     val m =
-      hc.mFromMap(LagContext.mapFromSeqOfSeq(vMatrix, sparseValue), sparseValue)
+      hc.mFromMap((nr, nc), LagContext.mapFromSeqOfSeq(vMatrix, sparseValue), sparseValue)
     val mT = m.transpose
 
     val (vvm, vvs) = hc.mToMap(mT)
-    val mTres = LagContext.vectorOfVectorFromMap(vvm, vvs, (nr, nc))
+    val mTres = LagContext.vectorOfVectorFromMap((nr, nc), vvm, vvs)
     assert(mTres.size == nr)
     mTres.zipWithIndex.map {
       case (vr, r) => {
@@ -53,12 +53,12 @@ class LagSmpMechanicSuite extends FunSuite with Matchers {
 
   test("LagSmpContext.vFromMrow") {
     val nr = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nr)
+    val hc: LagContext = LagContext.getLagSmpContext()
     var nc = 10
     val vMatrix = Vector.tabulate(nr, nc)((r, c) => (r * nc + c).toDouble)
     val sparseValue = 0.0
     val m =
-      hc.mFromMap(LagContext.mapFromSeqOfSeq(vMatrix, sparseValue), sparseValue)
+      hc.mFromMap((nr, nc), LagContext.mapFromSeqOfSeq(vMatrix, sparseValue), sparseValue)
     val testRow = 1
     val v = hc.vFromMrow(m, testRow)
 
@@ -73,12 +73,12 @@ class LagSmpMechanicSuite extends FunSuite with Matchers {
 
   test("LagSmpContext.vFromMcol") {
     val nr = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nr)
+    val hc: LagContext = LagContext.getLagSmpContext()
     var nc = 10
     val vMatrix = Vector.tabulate(nr, nc)((r, c) => (r * nc + c).toDouble)
     val sparseValue = 0.0
     val m =
-      hc.mFromMap(LagContext.mapFromSeqOfSeq(vMatrix, sparseValue), sparseValue)
+      hc.mFromMap((nr, nc), LagContext.mapFromSeqOfSeq(vMatrix, sparseValue), sparseValue)
     val testCol = 1
     val v = hc.vFromMcol(m, testCol)
 

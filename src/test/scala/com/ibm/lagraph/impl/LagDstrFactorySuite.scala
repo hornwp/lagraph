@@ -36,7 +36,8 @@ class LagDstrFactorySuite extends FunSuite with Matchers with SharedSparkContext
   val nblocks = List(1 << 0, 1 << 1, 1 << 2, 1 << 3)
 
   test("test initializing spark context") {
-    val hc: LagContext = LagContext.getLagDstrContext(sc, 1 << 3, 1)
+    val hc: LagContext = LagContext.getLagDstrContext(sc, 1)
+    val numv = 1 << 3
     val list = nblocks
     val rdd = sc.parallelize(list)
     assert(rdd.count === list.length)
@@ -46,12 +47,12 @@ class LagDstrFactorySuite extends FunSuite with Matchers with SharedSparkContext
     for (graphSize <- denseGraphSizes) {
       for (nblock <- nblocks) {
         if (DEBUG) println("LagDstrContext.vIndices", graphSize, nblock)
-        val hc: LagContext = LagContext.getLagDstrContext(sc, graphSize, nblock)
+        val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
         val start = 2
-        val end = start + hc.graphSize
-        val v = hc.vIndices(start)
+        val end = start + graphSize
+        val v = hc.vIndices(graphSize, start)
         val vRes = hc.vToVector(v)
-        assert(v.size == hc.graphSize)
+        assert(v.size == graphSize)
         assert(vRes.size == (end - start))
         (start until end.toInt).map { r =>
           assert(vRes(r - start) == r)
@@ -64,12 +65,12 @@ class LagDstrFactorySuite extends FunSuite with Matchers with SharedSparkContext
     for (graphSize <- denseGraphSizes) {
       for (nblock <- nblocks) {
         if (DEBUG) println("LagDstrContext.mIndices", graphSize, nblock)
-        val hc: LagContext = LagContext.getLagDstrContext(sc, graphSize, nblock)
+        val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
         val start = (2L, 2L)
-        val m = hc.mIndices(start)
+        val m = hc.mIndices((graphSize, graphSize), start)
         val (mResMap, sparseValue) = hc.mToMap(m)
         val mRes =
-          LagContext.vectorOfVectorFromMap(mResMap, sparseValue, m.size)
+          LagContext.vectorOfVectorFromMap(m.size, mResMap, sparseValue)
         val end = (start._1 + graphSize, start._2 + graphSize)
         assert(mRes.size == (end._1 - start._1))
         mRes.zipWithIndex.map {
@@ -87,12 +88,12 @@ class LagDstrFactorySuite extends FunSuite with Matchers with SharedSparkContext
     for (graphSize <- denseGraphSizes) {
       for (nblock <- nblocks) {
         if (DEBUG) println("LagDstrContext.mReplicate", graphSize, nblock)
-        val hc: LagContext = LagContext.getLagDstrContext(sc, graphSize, nblock)
+        val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
         val singleValue: Double = 99.0
-        val m = hc.mReplicate(singleValue)
+        val m = hc.mReplicate((graphSize, graphSize), singleValue)
         val (mResMap, sparseValue) = hc.mToMap(m)
         val mRes =
-          LagContext.vectorOfVectorFromMap(mResMap, sparseValue, m.size)
+          LagContext.vectorOfVectorFromMap(m.size, mResMap, sparseValue)
         mRes.zipWithIndex.map {
           case (vr, r) => {
             assert(vr.size == graphSize)

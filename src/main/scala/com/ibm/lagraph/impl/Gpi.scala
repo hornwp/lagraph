@@ -30,96 +30,14 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.RDD.rddToOrderedRDDFunctions
 import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
 
-// ********
-case class GpiBvec[VS: ClassTag](val u: GpiAdaptiveVector[VS]) {
-  def add(f: (VS, VS) => VS, a: GpiBvec[VS]): GpiBvec[VS] = {
-    GpiBvec(GpiOps.gpi_zip(f, u, a.u, None, Option(u.threshold)))
-  }
-  def reduce[T2: ClassTag](f: (VS, T2) => T2, c: (T2, T2) => T2, zero: T2): T2 = {
-    GpiOps.gpi_reduce(f, c, zero, u)
-  }
-  override def toString(): String = u.toString()
-}
+final case class GpiDstrBlocker(val numv: Long,
+                                val nblockRequested: Int) {
 
-// ********
-case class GpiBmat[MS: ClassTag](val a: GpiAdaptiveVector[GpiAdaptiveVector[MS]]) {
-  val n = a.size
-  def loadMapBuilder(cl: Builder[((Long, Long), MS), Seq[((Long, Long), MS)]],
-                     rowOffset: Long,
-                     colOffset: Long): Unit = {
-    val itr = a.denseIterator
-    while (itr.hasNext) {
-      val (ir, rv) = itr.next()
-      val itc = rv.denseIterator
-      while (itc.hasNext) {
-        val (ic, v) = itc.next()
-        cl += Tuple2((rowOffset + ir.toLong, colOffset + ic.toLong), v) // LONG ISSUE
-      }
-    }
-  }
-  override def toString(): String = a.toString() // added by GABI
-}
-
-case class GpiDstrBvec[VS](val dstr: GpiDstr,
-                           val vecRdd: RDD[((Int, Int), GpiBvec[VS])],
-                           val sparseValue: VS) {
-  val nrow = dstr.numv
-  override def toString(): String = {
-    val ab = ArrayBuffer.fill(1, nrow.toInt)(sparseValue)
-    val mr = vecRdd.collect
-    var p = 0
-    for (r <- 0 until mr.size) {
-      val ai = mr(p)
-      val ar = ai._1._1
-      val ac = ai._1._2
-      val av = ai._2
-      for (r <- 0 until av.u.size) {
-        ab(0)(ar * dstr.stride + r) = av.u(r)
-      }
-    }
-    val aab = ab.toArray
-    aab.deep.mkString("\n").replaceAll("ArrayBuffer", "")
-  }
-}
-
-case class GpiDstrBmat[MS](val dstr: GpiDstr,
-                           val matRdd: RDD[((Int, Int), GpiBmat[MS])],
-                           val nrow: Long,
-                           val ncol: Long,
-                           val sparseValue: MS) {
-  override def toString(): String = {
-    val ab = ArrayBuffer.fill(nrow.toInt, ncol.toInt)(sparseValue)
-    val mr = matRdd.collect
-    var a = 0
-    for (a <- 0 until mr.size) {
-      val ai = mr(a)
-      val ar = ai._1._1
-      val ac = ai._1._2
-      val avga = ai._2
-      var r = 0
-      for (r <- 0 until avga.a.size) {
-        val rv = avga.a(r)
-        var c = 0
-        for (c <- 0 until rv.size) {
-          ab(ar * dstr.stride + r)(ac * dstr.stride + c) = rv(c)
-        }
-      }
-    }
-    val aab = ab.toArray
-    aab.deep.mkString("\n").replaceAll("ArrayBuffer", "")
-  }
-}
-
-// ********
-/**
-  * Distributed GPI abstraction
-  */
-class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
-    extends Serializable {
   require(nblockRequested > 0,
           "requested number_of_blocks: >%s< must be > 0".format(nblockRequested))
   val nblock = if (nblockRequested > numv) numv.toInt else nblockRequested
-  // ****
+  val partitions = nblock * nblock
+  // clipping
   private def computeClip(numvl: Long, nblock: Int): Tuple3[Int, Int, Int] =
     if (numvl >= nblock.toLong) { // at least one element per block
       val nblockl = nblock.toLong
@@ -133,23 +51,14 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
     } else { // more blocks than elements
       (numvl.toInt - 1, 1, 1)
     }
-  // ****
-  val partitions = nblock * nblock
-  // clipping
   val (clipN, stride, clipStride) = computeClip(numv, nblock)
   val (vecClipN, vecStride, vecClipStride) = computeClip(stride, clipN + 1)
   val (remClipN, remStride, remClipStride) = computeClip(clipStride, clipN + 1)
-  //  println("numv: >%s<, nblock: >%s<, partitions: >%s<".format(numv, nblock, partitions))
-  //  println("clipN: >%s<, stride: >%s<, clipStride: >%s<".format(clipN, stride, clipStride))
-  //  println("vecClipN: >%s<, vecStride: >%s<, vecClipStride: >%s<".format(
-  //    vecClipN,vecStride,vecClipStride))
-  //  println("remClipN: >%s<, remStride: >%s<, remClipStride: >%s<".format(
-  //    remClipN,remStride,remClipStride))
 
-  private def matrixPartitionIndexToKey(index: Int): ((Int, Int)) = {
+  def matrixPartitionIndexToKey(index: Int): ((Int, Int)) = {
     (index / (clipN + 1), index % (clipN + 1))
   }
-  private def vectorPartitionIndexToKey(index: Int): ((Int, Int)) = {
+  def vectorPartitionIndexToKey(index: Int): ((Int, Int)) = {
     val rblockin = index / (vecClipN + 1)
     require(index < clipN * (vecClipN + 1) + remClipN + 1, "bad index: >%s<".format(index))
     if (rblockin >= clipN) {
@@ -182,9 +91,141 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
       case (_, _) => vecStride
     }
   }
+  def getMinorStrides(minorNumv: Long, rblock: Int): (Int, Int, Int) = {
+    val (minorClipN, minorStride, minorClipStride) = computeClip(stride, clipN + 1)
+    val (remMinorClipN, remMinorStride, remMinorClipStride) = computeClip(clipStride, clipN + 1)
+    rblock match {
+      case `clipN` => (remClipN, remStride, remClipStride)
+      case _ => (vecClipN, vecStride, vecClipStride)
+    }
+  }
+  def getMinorStride(minorNumv: Long, rblock: Int, cblock: Int): Int = {
+    val (vecClipN, vecStride, vecClipStride) = computeClip(stride, clipN + 1)
+    val (remClipN, remStride, remClipStride) = computeClip(clipStride, clipN + 1)
+    (rblock, cblock) match {
+      case (`clipN`, `remClipN`) => remClipStride
+      case (`clipN`, _) => remStride
+      case (_, `vecClipN`) => vecClipStride
+      case (_, _) => vecStride
+    }
+  }
+  // for constructing blocked vectors and matrices
+  def getCoordRdd(sc: SparkContext): RDD[Int] = {
+    val coordRdd =
+      sc.parallelize(List.range(0, clipN + 1), numSlices = clipN + 1)
+    coordRdd.setName("GpiDstrBlockerCoordRdd")
+    coordRdd
+  }
+  def diagnose: Unit = {
+    // scalastyle:off println
+    println("GpiDstrBlocker: numv: >%s<, nblockRequested: >%s<".format(
+        numv, nblockRequested))
+    println("GpiDstrBlocker: nblock: >%s<, partitions: >%s<".format(
+        nblock, partitions))
+    println("GpiDstrBlocker: clipN: >%s<, stride: >%s<, clipStride: >%s<".format(
+        clipN, stride, clipStride))
+    println("GpiDstrBlocker: vecClipN: >%s<, vecStride: >%s<, vecClipStride: >%s<".format(
+      vecClipN, vecStride, vecClipStride))
+    println("GpiDstrBlocker: remClipN: >%s<, remStride: >%s<, remClipStride: >%s<".format(
+      remClipN, remStride, remClipStride))
+    // scalastyle:on println
+  }
+}
+
+// ********
+case class GpiBvec[VS: ClassTag](val u: GpiAdaptiveVector[VS]) {
+  def add(f: (VS, VS) => VS, a: GpiBvec[VS]): GpiBvec[VS] = {
+    GpiBvec(GpiOps.gpi_zip(f, u, a.u, None, Option(u.threshold)))
+  }
+  def reduce[T2: ClassTag](f: (VS, T2) => T2, c: (T2, T2) => T2, zero: T2): T2 = {
+    GpiOps.gpi_reduce(f, c, zero, u)
+  }
+  override def toString(): String = u.toString()
+}
+
+// ********
+case class GpiBmat[MS: ClassTag](val a: GpiAdaptiveVector[GpiAdaptiveVector[MS]]) {
+  val n = a.size
+  def loadMapBuilder(cl: Builder[((Long, Long), MS), Seq[((Long, Long), MS)]],
+                     rowOffset: Long,
+                     colOffset: Long): Unit = {
+    val itr = a.denseIterator
+    while (itr.hasNext) {
+      val (ir, rv) = itr.next()
+      val itc = rv.denseIterator
+      while (itc.hasNext) {
+        val (ic, v) = itc.next()
+        cl += Tuple2((rowOffset + ir.toLong, colOffset + ic.toLong), v) // LONG ISSUE
+      }
+    }
+  }
+  override def toString(): String = a.toString() // added by GABI
+}
+
+case class GpiDstrBvec[VS](val dstr: GpiDstr,
+                           val blocker: GpiDstrBlocker,
+                           val vecRdd: RDD[((Int, Int), GpiBvec[VS])],
+                           val sparseValue: VS) {
+  val nrow = blocker.numv
+  override def toString(): String = {
+    val ab = ArrayBuffer.fill(1, nrow.toInt)(sparseValue)
+    val mr = vecRdd.collect
+    var p = 0
+    for (r <- 0 until mr.size) {
+      val ai = mr(p)
+      val ar = ai._1._1
+      val ac = ai._1._2
+      val av = ai._2
+      for (r <- 0 until av.u.size) {
+        ab(0)(ar * blocker.stride + r) = av.u(r)
+      }
+    }
+    val aab = ab.toArray
+    aab.deep.mkString("\n").replaceAll("ArrayBuffer", "")
+  }
+}
+
+case class GpiDstrBmat[MS](val dstr: GpiDstr,
+                           val blocker: GpiDstrBlocker,
+                           val matRdd: RDD[((Int, Int), GpiBmat[MS])],
+                           val nrow: Long,
+                           val ncol: Long,
+                           val sparseValue: MS) {
+  override def toString(): String = {
+    val ab = ArrayBuffer.fill(nrow.toInt, ncol.toInt)(sparseValue)
+    val mr = matRdd.collect
+    var a = 0
+    for (a <- 0 until mr.size) {
+      val ai = mr(a)
+      val ar = ai._1._1
+      val ac = ai._1._2
+      val avga = ai._2
+      var r = 0
+      for (r <- 0 until avga.a.size) {
+        val rv = avga.a(r)
+        var c = 0
+        for (c <- 0 until rv.size) {
+          ab(ar * blocker.stride + r)(ac * blocker.stride + c) = rv(c) // TODO NONSQUARE
+        }
+      }
+    }
+    val aab = ab.toArray
+    aab.deep.mkString("\n").replaceAll("ArrayBuffer", "")
+  }
+}
+
+// ********
+/**
+  * Distributed GPI abstraction
+  */
+class GpiDstr(val nblockRequested: Int, DEBUG: Boolean = false)
+    extends Serializable {
+  require(nblockRequested > 0,
+          "requested number_of_blocks: >%s< must be > 0".format(nblockRequested))
   // ****
   def dstrBvecFromRowOfRcvRdd[VS: ClassTag](
       sc: SparkContext,
+      nrow: Long,
       rcvRdd: RDD[((Long, Long), VS)], // ((VertexId, VertexId), VS)
       mRow: Long,
       vsSparse: VS): GpiDstrBvec[VS] = {
@@ -196,11 +237,12 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
     }
     val aRdd_rcv_init = rcvRdd.flatMap(f)
     aRdd_rcv_init.setName("aRdd_rcv_init")
-    dstrBvecFromRvRdd(sc, aRdd_rcv_init, vsSparse)
+    dstrBvecFromRvRdd(sc, nrow, aRdd_rcv_init, vsSparse)
   }
   // ****
   def dstrBvecFromColOfRcvRdd[VS: ClassTag](
       sc: SparkContext,
+      nrow: Long,
       rcvRdd: RDD[((Long, Long), VS)], // ((VertexId, VertexId), VS)
       mCol: Long,
       vsSparse: VS): GpiDstrBvec[VS] = {
@@ -212,14 +254,14 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
     }
     val aRdd_rcv_init = rcvRdd.flatMap(f)
     aRdd_rcv_init.setName("aRdd_rcv_init")
-    dstrBvecFromRvRdd(sc, aRdd_rcv_init, vsSparse)
+    dstrBvecFromRvRdd(sc, nrow, aRdd_rcv_init, vsSparse)
   }
   // ****
   def dstrBmatToRcvRdd[MS](dstrBmat: GpiDstrBmat[MS]): RDD[((Long, Long), MS)] = {
     def f(input: ((Int, Int), GpiBmat[MS])): List[((Long, Long), MS)] = {
       val rblockl = input._1._1.toLong
       val cblockl = input._1._2.toLong
-      val stridel = stride.toLong
+      val stridel = dstrBmat.blocker.stride.toLong
       val bmata = input._2
       bmata.a.denseIterator.toList.flatMap {
         case (lr, r) => {
@@ -237,15 +279,16 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
   }
   // ****
   def dstrBvecToRvRdd[VS](dstrBvec: GpiDstrBvec[VS]): RDD[(Long, VS)] = {
+    val blocker = dstrBvec.blocker
     val vecRdd = dstrBvec.vecRdd
-    val stridel = stride.toLong
+    val stridel = dstrBvec.blocker.stride.toLong
     def f(input: ((Int, Int), GpiBvec[VS])): List[(Long, VS)] = {
       val (rblock, cblock) = input._1
       val av = input._2.u
       if (av.denseCount == 0) {
         List()
       } else {
-        val vecstridel = getVectorStrides(rblock)._2.toLong
+        val vecstridel = blocker.getVectorStrides(rblock)._2.toLong
         av.denseIterator.toList.map {
           case (r: Int, v) => (rblock * stridel + cblock * vecstridel + r, v)
         }
@@ -257,7 +300,7 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
   // ****
   def dstrBmatAdaptiveToRcvRdd[MS: ClassTag](sc: SparkContext,
                                              dstrBmat: GpiDstrBmat[MS]): RDD[((Long, Long), MS)] = {
-    val stridel = dstrBmat.dstr.stride.toLong
+    val stridel = dstrBmat.blocker.stride.toLong
     def perblock(kv: ((Int, Int), GpiBmat[MS])): List[((Long, Long), MS)] = {
       val rblockl = kv._1._1.toLong
       val cblockl = kv._1._2.toLong
@@ -286,12 +329,14 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
   // ****
   def dstrBmatAdaptiveFromRcvRdd[MS: ClassTag](
       sc: SparkContext,
+      nrow: Long,
       rr: RDD[((Long, Long), MS)],
       msSparse: MS): (GpiDstrBmat[MS], Long, Map[String, Double]) = {
     val ttMS = classTag[MS]
-    val chunk = this.stride
+    val blocker = GpiDstrBlocker(nrow, this.nblockRequested)
+    val chunk = blocker.stride
     val csrChunkL = chunk.toLong
-    val csrChunkClipL = this.clipStride.toLong
+    val csrChunkClipL = blocker.clipStride.toLong
 
     // **
     // block coordinates
@@ -300,10 +345,10 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
         val (rgin, cgin, rlin, clin) =
           ((i / chunk).toInt, (j / chunk).toInt, (i % chunk).toInt, (j % chunk).toInt)
         val (rg, rl) =
-          if (rgin > clipN) (clipN, rlin + (rgin - clipN) * chunk)
+          if (rgin > blocker.clipN) (blocker.clipN, rlin + (rgin - blocker.clipN) * chunk)
           else (rgin, rlin)
         val (cg, cl) =
-          if (cgin > clipN) (clipN, clin + (cgin - clipN) * chunk)
+          if (cgin > blocker.clipN) (blocker.clipN, clin + (cgin - blocker.clipN) * chunk)
           else (cgin, clin)
         ((rg, cg, rl, cl), elem)
       }
@@ -320,9 +365,9 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
         val rr = r._3.toLong
         val rc = r._4.toLong
         val lthis =
-          if (l._2 == clipN) lr * csrChunkClipL + lc else lr * csrChunkL + lc
+          if (l._2 == blocker.clipN) lr * csrChunkClipL + lc else lr * csrChunkL + lc
         val rthat =
-          if (r._2 == clipN) rr * csrChunkClipL + rc else rr * csrChunkL + rc
+          if (r._2 == blocker.clipN) rr * csrChunkClipL + rc else rr * csrChunkL + rc
         if (lthis < rthat) -1
         else {
           if (lthis == rthat) 0 else 1
@@ -331,7 +376,7 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
     }
     // the global sort
     val blockedRdd_partitioned = blockedRdd.repartitionAndSortWithinPartitions(
-      new GpiBlockMatrixPartitioner(clipN + 1))
+      new GpiBlockMatrixPartitioner(blocker.clipN + 1))
     //    blockedRdd_partitioned.collect().foreach { case (k, v) => println(
     //      "blockedRdd_partitioned: k: (%s, %s, %s, %s) v: %s".format(k._1,k._2,k._3,k._4,v)) }
     blockedRdd_partitioned.setName("blockedRdd_partitioned")
@@ -343,9 +388,9 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
     def addArrays(
         index: Int,
         iter: Iterator[((Int, Int, Int, Int), MS)]): Iterator[((Int, Int), GpiBmat[MS])] = {
-      val (r, c) = (index / nblock, index % nblock)
-      val rChunk = if (r == this.clipN) this.clipStride else chunk
-      val cChunk = if (c == this.clipN) this.clipStride else chunk
+      val (r, c) = (index / blocker.nblock, index % blocker.nblock)
+      val rChunk = if (r == blocker.clipN) blocker.clipStride else chunk
+      val cChunk = if (c == blocker.clipN) blocker.clipStride else chunk
       val vSparse = GpiAdaptiveVector.fillWithSparse[MS](cChunk)(msSparse)
       val mSparse = GpiAdaptiveVector.fillWithSparse(rChunk)(vSparse)
       val rBuffer = ArrayBuffer.fill(rChunk)(vSparse)
@@ -400,7 +445,7 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
     //        k._1, k._2, GpiSparseRowMatrix.toString(v.asInstanceOf[GpiBmatAdaptive[MS]].a))) }
 
     // create DstrBmat
-    val dstrBmatLoaded = GpiDstrBmat(this, matrixRdd, numv, numv, msSparse)
+    val dstrBmatLoaded = GpiDstrBmat(this, blocker, matrixRdd, blocker.numv, blocker.numv, msSparse)
 
     // obtain count and force checkpoint
     val t0 = System.nanoTime()
@@ -418,6 +463,7 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
   // ****
   // Map[GlobalIndex, VS] -> RDD[(LocalIndex, Option[GpiBvec[VS]])]
   def dstrBvecFromMap[VS: ClassTag](sc: SparkContext,
+                                    nrow: Long,
                                     v: Map[Long, VS],
                                     vsSparse: VS,
                                     cache: Boolean = true): GpiDstrBvec[VS] = {
@@ -425,47 +471,53 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
     // List((rabs,value))
     val aRdd_map_init = sc.parallelize(l)
     aRdd_map_init.setName("aRdd_map_init")
-    dstrBvecFromRvRdd(sc, aRdd_map_init, vsSparse, cache)
+    dstrBvecFromRvRdd(sc, nrow, aRdd_map_init, vsSparse, cache)
   }
   // ****
   private def dstrBvecFromCons[VS: ClassTag](sc: SparkContext,
+                                             nrow: Long,
                                              vsCons: VS,
                                              vsSparse: VS): GpiDstrBvec[VS] = {
+    val blocker = GpiDstrBlocker(nrow, nblockRequested)
     def consBlockerV(kv: ((Int, Int), Int)): ((Int, Int), GpiBvec[VS]) = {
       val (rblock, cblock) = kv._1
-      val curVectorStride = getVectorStride(rblock, cblock)
-      val vec = Vector.fill[VS](getVectorStride(rblock, cblock))(vsCons)
+      val curVectorStride = blocker.getVectorStride(rblock, cblock)
+      val vec = Vector.fill[VS](blocker.getVectorStride(rblock, cblock))(vsCons)
       val av = GpiAdaptiveVector.fromSeq[VS](vec, vsSparse)
       //      if (av.denseCount == 0) (p, bvSparse) else (p, GpiBvec(av))
       ((rblock, cblock), GpiBvec(av))
     }
-    val aRdd_cons = createVectorBaseRdd(sc).map(consBlockerV)
-    // .partitionBy(new GpiBlockVectorPartitioner(clipN + 1, vecClipN + 1, remClipN + 1))
+    val aRdd_cons = blocker.createVectorBaseRdd(sc).map(consBlockerV)
+    // .partitionBy(new GpiBlockVectorPartitioner(blocker.clipN + 1, vecClipN + 1, remClipN + 1))
     aRdd_cons.setName("aRdd_cons")
-    GpiDstrBvec(this, aRdd_cons, vsSparse)
+    GpiDstrBvec(this, blocker, aRdd_cons, vsSparse)
 
   }
   // ****
   // RDD[(VertexId, VS)] -> RDD[(LocalIndex, Option[GpiBvec[VS]])]
   private def dstrBvecFromRvRdd[VS: ClassTag](sc: SparkContext,
+                                              nrow: Long,
                                               aRdd_init: RDD[(Long, VS)],
                                               vsSparse: VS,
                                               cache: Boolean = true): GpiDstrBvec[VS] = {
-
+    // blocker
+    val blocker = GpiDstrBlocker(nrow, nblockRequested)
     // sparse
-    val bvecSparseVecStride = GpiBvec(GpiAdaptiveVector.fillWithSparse[VS](vecStride)(vsSparse))
+    val bvecSparseVecStride =
+        GpiBvec(GpiAdaptiveVector.fillWithSparse[VS](blocker.vecStride)(vsSparse))
     val bvecSparseVecClipStride = GpiBvec(
-      GpiAdaptiveVector.fillWithSparse[VS](vecClipStride)(vsSparse))
-    val bvecSparseRemStride = GpiBvec(GpiAdaptiveVector.fillWithSparse[VS](remStride)(vsSparse))
+        GpiAdaptiveVector.fillWithSparse[VS](blocker.vecClipStride)(vsSparse))
+    val bvecSparseRemStride =
+        GpiBvec(GpiAdaptiveVector.fillWithSparse[VS](blocker.remStride)(vsSparse))
     val bvecSparseRemClipStride = GpiBvec(
-      GpiAdaptiveVector.fillWithSparse[VS](remClipStride)(vsSparse))
+        GpiAdaptiveVector.fillWithSparse[VS](blocker.remClipStride)(vsSparse))
 
     // blocking
-    val stridel = stride.toLong
-    val vecStridel = vecStride.toLong
-    val vecClipStridel = vecClipStride.toLong
-    val remStridel = remStride.toLong
-    val remClipStridel = remClipStride.toLong
+    val stridel = blocker.stride.toLong
+    val vecStridel = blocker.vecStride.toLong
+    val vecClipStridel = blocker.vecClipStride.toLong
+    val remStridel = blocker.remStride.toLong
+    val remClipStridel = blocker.remClipStride.toLong
 
     // **
     def partitionVectorIntoBlocks(rv: (Long, VS)): ((Int, Int), (Int, VS)) = {
@@ -473,14 +525,14 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
       val rabs = rv._1
       val rblockin = (rabs / stridel)
       val (rblock, cabs) =
-        if (rblockin > this.clipN) {
-          (this.clipN.toLong, rabs % stridel + (rblockin - this.clipN) * stridel)
+        if (rblockin > blocker.clipN) {
+          (blocker.clipN.toLong, rabs % stridel + (rblockin - blocker.clipN) * stridel)
         } else { (rblockin, rabs % stridel) }
-      if (rblock == this.clipN) {
+      if (rblock == blocker.clipN) {
         val cblockin = cabs / remStridel
         val (cblock, rlocal) =
-          if (cblockin > this.clipN) {
-            (this.clipN.toLong, cabs % remStridel + (cblockin - this.clipN) * remStridel)
+          if (cblockin > blocker.clipN) {
+            (blocker.clipN.toLong, cabs % remStridel + (cblockin - blocker.clipN) * remStridel)
           } else { (cblockin, cabs % remStridel) }
         //   println(
         //  "rblock: >%s<, cabs: >%s<, cblockin: >%s<, cblock: >%s<, rlocal: >%s<, value: >%s<"
@@ -490,8 +542,8 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
       } else {
         val cblockin = cabs / vecStridel
         val (cblock, rlocal) =
-          if (cblockin > this.clipN) {
-            (this.clipN.toLong, cabs % vecStridel + (cblockin - this.clipN) * vecStridel)
+          if (cblockin > blocker.clipN) {
+            (blocker.clipN.toLong, cabs % vecStridel + (cblockin - blocker.clipN) * vecStridel)
           } else { (cblockin, cabs % vecStridel) }
         ((rblock.toInt, cblock.toInt), (rlocal.toInt, rv._2))
       }
@@ -516,7 +568,7 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
       val listOfV = kv._2
       val mm: MMap[Int, VS] = MMap()
       listOfV.foreach { case (k, v) => mm(k) = v }
-      val curStride = getVectorStride(rblock, cblock)
+      val curStride = blocker.getVectorStride(rblock, cblock)
       //      println("rblock: >%s<, cblock: >%s<, curStride: >%s<".format(
       //        rblock, cblock, curStride))
       val avec = GpiAdaptiveVector.fromMap[VS](mm.toMap, vsSparse, curStride)
@@ -530,7 +582,10 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
         iter: Iterator[((Int, Int), GpiBvec[VS])]): Iterator[((Int, Int), GpiBvec[VS])] = {
       if (iter.hasNext) iter
       else {
-        val (rblock, cblock) = vectorPartitionIndexToKey(index)
+        val (rblock, cblock) = blocker.vectorPartitionIndexToKey(index)
+        val clipN = blocker.clipN
+        val remClipN = blocker.remClipN
+        val vecClipN = blocker.vecClipN
         val sparseBvec = (rblock, cblock) match {
           case (`clipN`, `remClipN`) => bvecSparseRemClipStride
           case (`clipN`, _) => bvecSparseRemStride
@@ -541,22 +596,27 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
       }
     }
     val aRdd_complete = aRdd_bvec
-      .partitionBy(new GpiBlockVectorPartitioner(clipN + 1, vecClipN + 1, remClipN + 1))
+      .partitionBy(new GpiBlockVectorPartitioner(blocker.clipN + 1,
+                                                 blocker.vecClipN + 1,
+                                                 blocker.remClipN + 1))
       .mapPartitionsWithIndex(addSparseBvec, true)
 
     val aRdd = if (cache) aRdd_complete else aRdd_complete.cache()
     aRdd.setName("aRdd")
     //    aRdd.collect().foreach { case (k, v) =>
     //      println("aRdd: k: (%s, %s) v: %s".format(k._1,k._2,v.u.toVector)) }
-    GpiDstrBvec(this, aRdd, vsSparse)
+    GpiDstrBvec(this, blocker, aRdd, vsSparse)
 
   }
 
   // ****
   private def dstrBvecFromIndices(sc: SparkContext,
+                                  nrow: Long,
                                   offset: Long,
                                   vsSparseOpt: Option[Long]): GpiDstrBvec[Long] = {
     val vsSparse = vsSparseOpt.getOrElse(0L)
+
+    val blocker = GpiDstrBlocker(nrow, nblockRequested)
 
     // ****
     // partition vector into blocks:
@@ -564,9 +624,9 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
     //    => (partition, (r_local, value))
     def indexBlockerV(kv: ((Int, Int), Int)): ((Int, Int), GpiBvec[Long]) = {
       val (rblock, cblock) = kv._1
-      val (vclipn, vstride, vclipstride) = getVectorStrides(rblock)
-      val curVectorStride = getVectorStride(rblock, cblock)
-      val begin = rblock.toLong * stride.toLong + cblock.toLong * vstride.toLong + offset
+      val (vclipn, vstride, vclipstride) = blocker.getVectorStrides(rblock)
+      val curVectorStride = blocker.getVectorStride(rblock, cblock)
+      val begin = rblock.toLong * blocker.stride.toLong + cblock.toLong * vstride.toLong + offset
       val end = begin + curVectorStride
       //      println("clipN >%s<, stride >%s<, clipStride >%s<".format(clipN, stride, clipStride))
       //      println("vstride >%s<, vclipstride >%s<, rblock: >%s<, cblock: >%s<, stride: >%s<" +
@@ -575,10 +635,10 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
       // never sparse
       ((rblock, cblock), GpiBvec(GpiAdaptiveVector.fromSeq[Long]((begin until end), vsSparse)))
     }
-    val aRdd_indices = createVectorBaseRdd(sc).map(indexBlockerV)
+    val aRdd_indices = blocker.createVectorBaseRdd(sc).map(indexBlockerV)
     // .partitionBy(new GpiBlockVectorPartitioner(clipN + 1, vecClipN + 1, remClipN + 1))
     aRdd_indices.setName("aRdd_indices")
-    GpiDstrBvec(this, aRdd_indices, vsSparse)
+    GpiDstrBvec(this, blocker, aRdd_indices, vsSparse)
   }
 
   // GPI base
@@ -592,10 +652,11 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
     *  @param sparseValue determines the sparsity of the new vector.
     */
   def dstr_replicate[T: ClassTag](sc: SparkContext,
+                                  nrow: Long,
                                   x: T,
                                   sparseValueOpt: Option[T] = None): GpiDstrBvec[T] = {
     val sparseValue = sparseValueOpt.getOrElse(x)
-    dstrBvecFromCons(sc, x, sparseValue)
+    dstrBvecFromCons(sc, nrow, x, sparseValue)
   }
 
   /**
@@ -605,9 +666,10 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
     *  @param end the end of the range
     */
   def dstr_indices(sc: SparkContext,
+                   nrow: Long,
                    start: Long,
                    sparseValueOpt: Option[Long] = None): GpiDstrBvec[Long] = {
-    dstrBvecFromIndices(sc, start, sparseValueOpt)
+    dstrBvecFromIndices(sc, nrow, start, sparseValueOpt)
   }
 
   /**
@@ -649,8 +711,10 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
     val sparseValueT2 = sparseValueT2Opt.getOrElse(f(u.sparseValue))
     val mappedDVV = u.vecRdd
       .mapValues(fv)
-      .partitionBy(new GpiBlockVectorPartitioner(clipN + 1, vecClipN + 1, remClipN + 1))
-    GpiDstrBvec(this, mappedDVV, sparseValueT2)
+      .partitionBy(new GpiBlockVectorPartitioner(u.blocker.clipN + 1,
+                                                 u.blocker.vecClipN + 1,
+                                                 u.blocker.remClipN + 1))
+    GpiDstrBvec(this, u.blocker, mappedDVV, sparseValueT2)
   }
 
   /**
@@ -701,7 +765,7 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
     val a_dstr_zip_map = a_dstr_zip.mapValues(fco)
     a_dstr_zip_map.setName("a_dstr_zip_map")
     //    println("SSSSSSSS: dstr_zip: sparseValueT3: >%s<".format(sparseValueT3))
-    GpiDstrBvec(this, a_dstr_zip_map, sparseValueT3)
+    GpiDstrBvec(this, u.blocker, a_dstr_zip_map, sparseValueT3)
   }
 
   // GPI derived
@@ -767,10 +831,10 @@ class GpiDstr(val nblockRequested: Int, val numv: Long, DEBUG: Boolean = false)
 object GpiDstr {
 
   // constructor
-  def apply(sc: SparkContext, nblock: Int, numv: Long, DEBUG: Boolean = false): GpiDstr = {
+  def apply(sc: SparkContext, nblockRequested: Int, DEBUG: Boolean = false): GpiDstr = {
     // val mtv = GpiMtv(sc, if (numv >= nblock) nblock else numv.toInt, DEBUG = DEBUG)
     // new GpiDstr(nblock, numv, mtv, DEBUG)
-    new GpiDstr(nblock, numv, DEBUG)
+    new GpiDstr(nblockRequested, DEBUG)
   }
 
   // ****

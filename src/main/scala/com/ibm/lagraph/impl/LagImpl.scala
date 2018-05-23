@@ -36,7 +36,10 @@ final case class LagDstrMatrix[T: ClassTag](override val hc: LagContext,
   //  override def size = (dstrBmat.nrow, dstrBmat.ncol)
   override lazy val _transpose: LagMatrix[T] = hc match {
     case hca: LagDstrContext => {
-      hca.mFromRcvRdd(rcvRdd.map { case (k, v) => ((k._2, k._1), v) }, dstrBmat.sparseValue)
+      hca.mFromRcvRdd((dstrBmat.nrow,
+                      dstrBmat.ncol),
+                      rcvRdd.map { case (k, v) => ((k._2, k._1), v) },
+                      dstrBmat.sparseValue)
     } // this.hc.mTranspose(this)
   }
 }
@@ -48,20 +51,21 @@ final case class LagDstrMatrix[T: ClassTag](override val hc: LagContext,
   */
 final case class LagDstrVector[T: ClassTag](override val hc: LagContext,
                                             val dstrBvec: GpiDstrBvec[T])
-    extends LagVector[T](hc, dstrBvec.nrow) {
-  //  override def size = dstrBvec.nrow // TODO Int->Long
-}
+    extends LagVector[T](hc, dstrBvec.nrow)
 
 // ********
 // SMP MATRIX
 final case class LagSmpMatrix[T: ClassTag](override val hc: LagContext,
+                                           nrow: Long,
+                                           ncol: Long,
                                            rcvMap: Map[(Long, Long), T],
                                            vov: GpiAdaptiveVector[GpiAdaptiveVector[T]])
     extends LagMatrix[T](hc, (vov.size, vov(0).size)) {
   //  override def size = (vov.size, vov(0).size)
   override lazy val _transpose: LagMatrix[T] = hc match {
     case hca: LagSmpContext => {
-      hca.mFromMap(rcvMap.map { case (k, v) => ((k._2, k._1), v) }, vov(0).sparseValue)
+      hca.mFromMap((nrow, ncol),
+          rcvMap.map { case (k, v) => ((k._2, k._1), v) }, vov(0).sparseValue)
     }
   }
   //    LagSmpMatrix(this.hc, rcvMap.map{case(k:(Long, Long), v:T) =>

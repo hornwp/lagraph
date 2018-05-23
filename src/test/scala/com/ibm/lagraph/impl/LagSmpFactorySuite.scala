@@ -28,10 +28,10 @@ class LagSmpFactorySuite extends FunSuite with Matchers {
 
   test("LagSmpContext.vIndices") {
     val nv = 8
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val start = 2
     val end = start + nv
-    val v = hc.vIndices(start)
+    val v = hc.vIndices(nv, start)
     val vRes = hc.vToVector(v)
 //    assert(vRes.isInstanceOf[Vector[Int]])
     assert(vRes.size == (end - start))
@@ -41,9 +41,9 @@ class LagSmpFactorySuite extends FunSuite with Matchers {
   }
   test("LagSmpContext.vReplicate") {
     val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val singleValue: Double = 99.0
-    val v = hc.vReplicate(singleValue)
+    val v = hc.vReplicate(nv, singleValue)
     val vRes = hc.vToVector(v)
     assert(vRes.isInstanceOf[Vector[Double]])
     assert(vRes.size == nv)
@@ -53,12 +53,12 @@ class LagSmpFactorySuite extends FunSuite with Matchers {
   }
   test("LagSmpContext.mIndices") {
     val nv = 8
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val hc: LagContext = LagContext.getLagSmpContext()
     val start = (2L, 2L)
     val end = (start._1 + nv, start._2 + nv)
-    val m = hc.mIndices(start)
+    val m = hc.mIndices((nv, nv), start)
     val (vvm, vvs) = hc.mToMap(m)
-    val mRes = LagContext.vectorOfVectorFromMap(vvm, vvs, (nv, nv))
+    val mRes = LagContext.vectorOfVectorFromMap((nv, nv), vvm, vvs)
     assert(mRes.size == (end._1 - start._1))
     mRes.zipWithIndex.map {
       case (vr, r) => {
@@ -70,13 +70,13 @@ class LagSmpFactorySuite extends FunSuite with Matchers {
     }
   }
   test("LagSmpContext.mReplicate") {
-    val nv = 10
-    val hc: LagContext = LagContext.getLagSmpContext(nv)
+    val nv = 10L
+    val hc: LagContext = LagContext.getLagSmpContext()
     val size = (nv, nv)
     val singleValue: Double = 99.0
-    val m = hc.mReplicate(singleValue)
+    val m = hc.mReplicate(size, singleValue)
     val (vvm, vvs) = hc.mToMap(m)
-    val mRes = LagContext.vectorOfVectorFromMap(vvm, vvs, (nv, nv))
+    val mRes = LagContext.vectorOfVectorFromMap((nv, nv), vvm, vvs)
     assert(mRes.size == size._1)
     mRes.zipWithIndex.map {
       case (vr, r) => {
