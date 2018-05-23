@@ -642,7 +642,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
         val vSparse = GpiAdaptiveVector.fillWithSparse[T](cChunk)(sr.zero)
         ((r, c), GpiAdaptiveVector.fillWithSparse(rChunk)(vSparse))
       }
-      val coordRdd = blocker.getCoordRdd(sc)
+      val coordRdd = GpiDstr.getCoordRdd(sc, blocker.clipN + 1)
       val Partial = coordRdd.cartesian(coordRdd).map(initPartial)
       //      Partial.collect().foreach { case (k, v) => println(
       //        "Partial: (%s,%s): %s".format(k._1, k._2, GpiSparseRowMatrix.toString(v))) }

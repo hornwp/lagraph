@@ -30,28 +30,28 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.RDD.rddToOrderedRDDFunctions
 import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
 
-final case class GpiDstrBlocker(val numv: Long,
+final case class GpiDstrBlocker(val nrow: Long,
                                 val nblockRequested: Int) {
 
   require(nblockRequested > 0,
           "requested number_of_blocks: >%s< must be > 0".format(nblockRequested))
-  val nblock = if (nblockRequested > numv) numv.toInt else nblockRequested
+  val nblock = if (nblockRequested > nrow) nrow.toInt else nblockRequested
   val partitions = nblock * nblock
   // clipping
-  private def computeClip(numvl: Long, nblock: Int): Tuple3[Int, Int, Int] =
-    if (numvl >= nblock.toLong) { // at least one element per block
+  private def computeClip(n: Long, nblock: Int): Tuple3[Int, Int, Int] =
+    if (n >= nblock.toLong) { // at least one element per block
       val nblockl = nblock.toLong
-      val strideA = (numvl / nblockl).toInt
-      val clipA = (numvl - nblockl * strideA.toLong).toInt
+      val strideA = (n / nblockl).toInt
+      val clipA = (n - nblockl * strideA.toLong).toInt
       if (clipA == 0) {
         (nblock - 1, strideA, strideA)
       } else {
-        (nblock - 1, strideA, (numvl - (nblockl - 1) * strideA.toLong).toInt)
+        (nblock - 1, strideA, (n - (nblockl - 1) * strideA.toLong).toInt)
       }
     } else { // more blocks than elements
-      (numvl.toInt - 1, 1, 1)
+      (n.toInt - 1, 1, 1)
     }
-  val (clipN, stride, clipStride) = computeClip(numv, nblock)
+  val (clipN, stride, clipStride) = computeClip(nrow, nblock)
   val (vecClipN, vecStride, vecClipStride) = computeClip(stride, clipN + 1)
   val (remClipN, remStride, remClipStride) = computeClip(clipStride, clipN + 1)
 
@@ -91,35 +91,35 @@ final case class GpiDstrBlocker(val numv: Long,
       case (_, _) => vecStride
     }
   }
-  def getMinorStrides(minorNumv: Long, rblock: Int): (Int, Int, Int) = {
-    val (minorClipN, minorStride, minorClipStride) = computeClip(stride, clipN + 1)
-    val (remMinorClipN, remMinorStride, remMinorClipStride) = computeClip(clipStride, clipN + 1)
-    rblock match {
-      case `clipN` => (remClipN, remStride, remClipStride)
-      case _ => (vecClipN, vecStride, vecClipStride)
-    }
-  }
-  def getMinorStride(minorNumv: Long, rblock: Int, cblock: Int): Int = {
-    val (vecClipN, vecStride, vecClipStride) = computeClip(stride, clipN + 1)
-    val (remClipN, remStride, remClipStride) = computeClip(clipStride, clipN + 1)
-    (rblock, cblock) match {
-      case (`clipN`, `remClipN`) => remClipStride
-      case (`clipN`, _) => remStride
-      case (_, `vecClipN`) => vecClipStride
-      case (_, _) => vecStride
-    }
-  }
-  // for constructing blocked vectors and matrices
-  def getCoordRdd(sc: SparkContext): RDD[Int] = {
-    val coordRdd =
-      sc.parallelize(List.range(0, clipN + 1), numSlices = clipN + 1)
-    coordRdd.setName("GpiDstrBlockerCoordRdd")
-    coordRdd
-  }
+//  def getMinorStrides(minornrow: Long, rblock: Int): (Int, Int, Int) = {
+//    val (minorClipN, minorStride, minorClipStride) = computeClip(stride, clipN + 1)
+//    val (remMinorClipN, remMinorStride, remMinorClipStride) = computeClip(clipStride, clipN + 1)
+//    rblock match {
+//      case `clipN` => (remClipN, remStride, remClipStride)
+//      case _ => (vecClipN, vecStride, vecClipStride)
+//    }
+//  }
+//  def getMinorStride(minornrow: Long, rblock: Int, cblock: Int): Int = {
+//    val (vecClipN, vecStride, vecClipStride) = computeClip(stride, clipN + 1)
+//    val (remClipN, remStride, remClipStride) = computeClip(clipStride, clipN + 1)
+//    (rblock, cblock) match {
+//      case (`clipN`, `remClipN`) => remClipStride
+//      case (`clipN`, _) => remStride
+//      case (_, `vecClipN`) => vecClipStride
+//      case (_, _) => vecStride
+//    }
+//  }
+//  // utility for constructing blocked vectors and matrices
+//  def getCoordRdd(sc: SparkContext): RDD[Int] = {
+//    val coordRdd =
+//      sc.parallelize(List.range(0, clipN + 1), numSlices = clipN + 1)
+//    coordRdd.setName("GpiDstrBlockerCoordRdd")
+//    coordRdd
+//  }
   def diagnose: Unit = {
     // scalastyle:off println
-    println("GpiDstrBlocker: numv: >%s<, nblockRequested: >%s<".format(
-        numv, nblockRequested))
+    println("GpiDstrBlocker: nrow: >%s<, nblockRequested: >%s<".format(
+        nrow, nblockRequested))
     println("GpiDstrBlocker: nblock: >%s<, partitions: >%s<".format(
         nblock, partitions))
     println("GpiDstrBlocker: clipN: >%s<, stride: >%s<, clipStride: >%s<".format(
@@ -166,7 +166,7 @@ case class GpiDstrBvec[VS](val dstr: GpiDstr,
                            val blocker: GpiDstrBlocker,
                            val vecRdd: RDD[((Int, Int), GpiBvec[VS])],
                            val sparseValue: VS) {
-  val nrow = blocker.numv
+  val nrow = blocker.nrow
   override def toString(): String = {
     val ab = ArrayBuffer.fill(1, nrow.toInt)(sparseValue)
     val mr = vecRdd.collect
@@ -445,7 +445,7 @@ class GpiDstr(val nblockRequested: Int, DEBUG: Boolean = false)
     //        k._1, k._2, GpiSparseRowMatrix.toString(v.asInstanceOf[GpiBmatAdaptive[MS]].a))) }
 
     // create DstrBmat
-    val dstrBmatLoaded = GpiDstrBmat(this, blocker, matrixRdd, blocker.numv, blocker.numv, msSparse)
+    val dstrBmatLoaded = GpiDstrBmat(this, blocker, matrixRdd, blocker.nrow, blocker.nrow, msSparse)
 
     // obtain count and force checkpoint
     val t0 = System.nanoTime()
@@ -903,6 +903,13 @@ object GpiDstr {
       .values
       .reduce(reduceCountTotalNonzeros)
     checkTotalNonzeros
+  }
+  // utility for constructing blocked vectors and matrices
+  def getCoordRdd(sc: SparkContext, N: Int): RDD[Int] = {
+    val coordRdd =
+      sc.parallelize(List.range(0, N), numSlices = N)
+    coordRdd.setName("GpiDstrCoordRdd")
+    coordRdd
   }
 }
 
