@@ -17,12 +17,11 @@
  * under the License.
  */
 package com.ibm.lagraph.impl
-// TODO get rid of printlns
-// scalastyle:off println
 
 import org.scalatest.FunSuite
 import com.ibm.lagraph._
 
+// scalastyle:off println
 class GpiBufferSuite extends FunSuite {
   val DEBUG = false
 

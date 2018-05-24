@@ -25,7 +25,9 @@ import scala.collection.mutable.{Map => MMap}
 import com.holdenkarau.spark.testing.SharedSparkContext
 import com.ibm.lagraph._
 
+// scalastyle:off println
 class LagDstrImportExportSuite extends FunSuite with Matchers with SharedSparkContext {
+  val DEBUG = false
 
   val lar = 1L
   val lac = 2L
@@ -39,8 +41,8 @@ class LagDstrImportExportSuite extends FunSuite with Matchers with SharedSparkCo
   test("LagDstrContext.mFromMap Empty") {
     for (graphSize <- sparseGraphSizes) {
       for (nblock <- nblocks) {
-//        println("LagDstrContext.mFromMap Empty graphSize: >%d<, nblock: >%d<"
-//          .format(graphSize, nblock))
+        if (DEBUG) println("LagDstrContext.mFromMap Empty graphSize: >%d<, nblock: >%d<"
+            .format(graphSize, nblock))
         val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
         val sparseValue = 0.0
         val mMap = Map[(Long, Long), Double]()
@@ -61,8 +63,8 @@ class LagDstrImportExportSuite extends FunSuite with Matchers with SharedSparkCo
       for (nblock <- nblocks) {
         val lbr = (1L << graphSize) - 1L
         val lbc = (1L << graphSize) - 1L
-//        println("LagDstrContext.mFromMap Sparse graphSize: >%d<, nblock: >%d<"
-//          .format(graphSize, nblock))
+        if (DEBUG) println("LagDstrContext.mFromMap Sparse graphSize: >%d<, nblock: >%d<"
+            .format(graphSize, nblock))
         val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
         val sparseValue = 0.0
         val testValue = 99.0
@@ -269,3 +271,4 @@ class LagDstrImportExportSuite extends FunSuite with Matchers with SharedSparkCo
   }
   // TOOD add tests for vToRvRdd
 }
+// scalastyle:on println

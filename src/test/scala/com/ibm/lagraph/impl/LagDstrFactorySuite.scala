@@ -17,8 +17,6 @@
  * under the License.
  */
 package com.ibm.lagraph.impl
-// TODO get rid of printlns
-// scalastyle:off println
 
 import com.holdenkarau.spark.testing.SharedSparkContext
 import org.scalatest.FunSuite
@@ -27,6 +25,7 @@ import scala.reflect.ClassTag
 import scala.collection.mutable.{Map => MMap}
 import com.ibm.lagraph._
 
+// scalastyle:off println
 class LagDstrFactorySuite extends FunSuite with Matchers with SharedSparkContext {
   val DEBUG = false
 

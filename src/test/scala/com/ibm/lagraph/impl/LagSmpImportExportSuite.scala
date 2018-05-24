@@ -24,7 +24,9 @@ import scala.reflect.ClassTag
 import scala.collection.mutable.{Map => MMap}
 import com.ibm.lagraph._
 
+// scalastyle:off println
 class LagSmpImportExportSuite extends FunSuite with Matchers {
+  val DEBUG = false
 
   test("LagSmpContext.mFromMap Empty") {
     val nv = 10
@@ -407,3 +409,4 @@ class LagSmpImportExportSuite extends FunSuite with Matchers {
     }
   }
 }
+// scalastyle:on println
