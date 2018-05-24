@@ -30,7 +30,8 @@ import com.ibm.lagraph.impl.{
   GpiBmat,
   GpiAdaptiveVector,
   GpiOps,
-  GpiDstrBlocker,
+  GpiDstrMatrixBlocker,
+  GpiDstrVectorBlocker,
   GpiDstrBmat,
   GpiDstrBvec,
   GpiSparseRowMatrix,
@@ -145,7 +146,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
         "matrix size: >(%s, %s)< must be > (0, 0)".format(size._1, size._2))
     val (nrow, ncol) = size
     val rcv = mMap.view.map { case (k, v) => ((k._1, k._2), v) }.toList
-    val blocker = GpiDstrBlocker(nrow, dstr.nblockRequested)
+    val blocker = GpiDstrMatrixBlocker(nrow, dstr.nblockRequested)
     val rcvRdd = sc.parallelize(rcv, blocker.partitions)
     val (dstrRdd, nBlocksLoaded, times) =
       dstr.dstrBmatAdaptiveFromRcvRdd(sc, nrow, rcvRdd, sparseValue)
@@ -443,10 +444,10 @@ final case class LagDstrContext(@transient sc: SparkContext,
         }
         val vSparse = if (c == ma.dstrBmat.blocker.clipN) {
           GpiAdaptiveVector.fillWithSparse[T2](
-              ma.dstrBmat.blocker.vecStride)(msSparse)
+              ma.dstrBmat.blocker.stride)(msSparse)
         } else {
           GpiAdaptiveVector.fillWithSparse[T2](
-              ma.dstrBmat.blocker.vecClipStride)(msSparse)
+              ma.dstrBmat.blocker.clipStride)(msSparse)
         }
         val vovZip = GpiOps.gpi_zip_with_index_vector(perrow,
                                                       v.a,
@@ -478,8 +479,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
         val vsSparse = ldu.dstrBvec.sparseValue
         val A = ldm.dstrBmat
         val u = ldu.dstrBvec
-        assert (A.blocker == u.blocker)
-        val blocker = A.blocker
+//        assert (A.blocker == u.blocker)
         // ********
         // distribution functor
         def distributeVector(
@@ -489,7 +489,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
           val gxa = kv._2.asInstanceOf[GpiBvec[T]]
           def recurse(rdls: List[((Int, Int), (Int, GpiBvec[T]))],
                       targetBlock: Int): List[((Int, Int), (Int, GpiBvec[T]))] =
-            if (targetBlock == blocker.clipN + 1) rdls
+            if (targetBlock == u.blocker.clipN + 1) rdls
             else {
               // ****
               recurse(((targetBlock, r), (c, gxa)) :: rdls, targetBlock + 1)
@@ -506,8 +506,8 @@ final case class LagDstrContext(@transient sc: SparkContext,
         def calculate(kv: ((Int, Int), (Iterable[GpiBmat[T]], Iterable[(Int, GpiBvec[T])]))) = {
           val r = kv._1._1
           val c = kv._1._2
-          val stride = blocker.getVectorStride(r, c)
-          val (vclipn, vstride, vclipstride) = blocker.getVectorStrides(c)
+          val stride = u.blocker.getVectorStride(r, c)
+          val (vclipn, vstride, vclipstride) = u.blocker.getVectorStrides(c)
           //        val cPartial = kv._2._1.iterator.next()
           //        val cPartial = GpiAdaptiveVector.fillWithSparse[T](stride)(sr.zero)
           //        val cAa = kv._2._1.iterator.next().asInstanceOf[GpiBmatAdaptive[T]].a
@@ -578,7 +578,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
             : List[((Int, Int), GpiAdaptiveVector[T])] =
             if (pos >= array.size) choplist
             else {
-              val curVectorStride = blocker.getVectorStride(r, n)
+              val curVectorStride = u.blocker.getVectorStride(r, n)
               val nextPos = pos + curVectorStride
               val newArray = array.slice(pos, nextPos)
               //          println("chop: (r,c): (%s,%s) -> (r,n):
@@ -595,9 +595,9 @@ final case class LagDstrContext(@transient sc: SparkContext,
         val choppedResults = partial1
           .flatMap(chopResults)
           .partitionBy(
-            new com.ibm.lagraph.impl.GpiBlockVectorPartitioner(blocker.clipN + 1,
-                                                               blocker.vecClipN + 1,
-                                                               blocker.remClipN + 1))
+            new com.ibm.lagraph.impl.GpiBlockVectorPartitioner(u.blocker.clipN + 1,
+                                                               u.blocker.vecClipN + 1,
+                                                               u.blocker.remClipN + 1))
         //      choppedResults.collect().foreach { case (k, v) =>
         //        println("choppedResults: (%s,%s): %s".format(k._1, k._2, v.toVector)) }
         // ****
@@ -620,7 +620,8 @@ final case class LagDstrContext(@transient sc: SparkContext,
           .mapPartitionsWithIndex(zipChoppedResults, preservesPartitioning = true)
           .map { case (k, v) => Tuple2(k, GpiBvec(v)) }
         // ****
-        LagDstrVector(this, GpiDstrBvec(dstr, blocker, result, vsSparse))
+        val vblocker = GpiDstrVectorBlocker(u.blocker.nrow, u.blocker.nblock)
+        LagDstrVector(this, GpiDstrBvec(dstr, vblocker, result, vsSparse))
       }
     }
   private[lagraph] override def mTm[T: ClassTag](sr: LagSemiring[T],
@@ -864,7 +865,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
       val newMmap = ma.rcvRdd.map { case (k, v) => ((k._2, k._1), v) }
       val matRdd = ma.dstrBmat.matRdd
         .mapPartitions(perblock, preservesPartitioning = false)
-      val blocker = GpiDstrBlocker(ma.size._2, ma.dstrBmat.dstr.nblockRequested)
+      val blocker = GpiDstrMatrixBlocker(ma.size._2, ma.dstrBmat.dstr.nblockRequested)
       LagDstrMatrix(this,
                     newMmap,
                     GpiDstrBmat(ma.dstrBmat.dstr,
@@ -906,16 +907,16 @@ final case class LagDstrContext(@transient sc: SparkContext,
     }
 
 }
-object LagDstrContext {
-  private def computeNblock(hc: LagContext,
-                            numv: Long,
-                            nblockRequestedInBlocker: Option[Int] = None): Int = {
-    val nblockRequestedInContext = hc match {
-      case hca: LagDstrContext => {
-        hca.nblockRequested
-      }
-    }
-    val nblockRequested = nblockRequestedInBlocker.getOrElse(nblockRequestedInContext)
-    if (nblockRequested > numv) numv.toInt else nblockRequested
-  }
-}
+// object LagDstrContext {
+//  private def computeNblock(hc: LagContext,
+//                            numv: Long,
+//                            nblockRequestedInBlocker: Option[Int] = None): Int = {
+//    val nblockRequestedInContext = hc match {
+//      case hca: LagDstrContext => {
+//        hca.nblockRequested
+//      }
+//    }
+//    val nblockRequested = nblockRequestedInBlocker.getOrElse(nblockRequestedInContext)
+//    if (nblockRequested > numv) numv.toInt else nblockRequested
+//  }
+// }
