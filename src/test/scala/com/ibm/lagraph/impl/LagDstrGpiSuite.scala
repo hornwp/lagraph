@@ -207,49 +207,6 @@ class LagDstrGpiSuite extends FunSuite with Matchers with SharedSparkContext {
     }
   }
 
-  test("LagDstrContext.mTm3NSQ") {
-//  def LagDstrContext_mTm3NSQ(sc: SparkContext): Unit = {
-    val add_mul = LagSemiring.plus_times[Double]
-    val denseGraphSizes = (1 until 16).toList
-    val nblocks = (1 until 12).toList
-    val sr = LagSemiring.plus_times[Double]
-    for (graphSizeRequested <- denseGraphSizes) {
-      for (nblock <- nblocks) {
-        for (colshift <- List(1, 2, 3,
-            graphSizeRequested - 2, graphSizeRequested - 2, graphSizeRequested)) {
-          for (negate <- List(true, false)) {
-            val nr = graphSizeRequested
-            val nc = if (negate) {graphSizeRequested - colshift}
-                else graphSizeRequested + colshift
-            if (nc > scala.math.min(nblock, nr) && nr > scala.math.min(nblock, nc)) {
-              if (DEBUG) println("LagDstrContext.mTm", nr, nc, nblock)
-              val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
-              val nA = Vector.tabulate(nr, nc)((r, c) => r * nc + c + 1.0)
-              val nB = Vector.tabulate(nc, nr)((r, c) => r * nc + c + 101.0)
-              val sparseValue = 0.0
-              val mA =
-                hc.mFromMap((nr, nc),
-                    LagContext.mapFromSeqOfSeq(nA, sparseValue), sparseValue)
-              val mB =
-                hc.mFromMap((nc, nr),
-                    LagContext.mapFromSeqOfSeq(nB, sparseValue), sparseValue)
-
-              val mTmRes = hc.mTm(sr, mA, mB)
-
-              val resScala = mult(nA, nB)
-              //         println(mTmRes)
-              // //        println(toArray(resScala).deep.mkString("\n"))
-              assert(
-                toArray(LagContext.vectorOfVectorFromMap((nr.toLong, nr.toLong),
-                                                         hc.mToMap(mTmRes)._1,
-                                                         sparseValue)).deep == toArray(
-                  resScala).deep)
-            }
-          }
-        }
-      }
-    }
-  }
 //  test("LagDstrContext.mTm nr != nc") {
 //    val nr = 16
 //    val hc: LagContext = LagContext.getLagDstrContext(nr)

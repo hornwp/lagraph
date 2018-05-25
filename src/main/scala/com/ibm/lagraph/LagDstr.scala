@@ -482,6 +482,11 @@ final case class LagDstrContext(@transient sc: SparkContext,
         val vsSparse = ldu.dstrBvec.sparseValue
         val A = ldm.dstrBmat
         val u = ldu.dstrBvec
+        require(A.blocker.nblock == u.blocker.nblock,
+            "current design precludes disparate blocks: " +
+            "M.block: >%s< < u.block: >%s<, try lowering nblock".
+            format(A.blocker.nblock, u.blocker.nblock))
+        val nblock = A.blocker.nblock
 //        assert (A.blocker == u.blocker)
         // ********
         // distribution functor
@@ -511,6 +516,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
           val c = kv._1._2
           val stride = u.blocker.getVectorStride(r, c)
           val (vclipn, vstride, vclipstride) = u.blocker.getVectorStrides(c)
+          //        for debug only ... note .next() changes the state of the iterator
           //        val cPartial = kv._2._1.iterator.next()
           //        val cPartial = GpiAdaptiveVector.fillWithSparse[T](stride)(sr.zero)
           //        val cAa = kv._2._1.iterator.next().asInstanceOf[GpiBmatAdaptive[T]].a
@@ -563,6 +569,10 @@ final case class LagDstrContext(@transient sc: SparkContext,
         //      partial1.collect().foreach { case (k, v) =>
         //        println("partial1: (%s,%s): %s".format(k._1, k._2, v.toVector)) }
         // ****
+        // Blocker for resultant vector
+        val vblocker = GpiDstrVectorBlocker(A.blocker.nrow, nblock)
+        vblocker.diagnose
+        // ****
         // functor to chop and send
         def chopResults(
             kv: ((Int, Int), GpiAdaptiveVector[T])): List[((Int, Int), GpiAdaptiveVector[T])] = {
@@ -581,7 +591,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
             : List[((Int, Int), GpiAdaptiveVector[T])] =
             if (pos >= array.size) choplist
             else {
-              val curVectorStride = u.blocker.getVectorStride(r, n)
+              val curVectorStride = vblocker.getVectorStride(r, n)
               val nextPos = pos + curVectorStride
               val newArray = array.slice(pos, nextPos)
               //          println("chop: (r,c): (%s,%s) -> (r,n):
@@ -598,9 +608,9 @@ final case class LagDstrContext(@transient sc: SparkContext,
         val choppedResults = partial1
           .flatMap(chopResults)
           .partitionBy(
-            new com.ibm.lagraph.impl.GpiBlockVectorPartitioner(u.blocker.clipN + 1,
-                                                               u.blocker.vecClipN + 1,
-                                                               u.blocker.remClipN + 1))
+            new com.ibm.lagraph.impl.GpiBlockVectorPartitioner(vblocker.clipN + 1,
+                                                               vblocker.vecClipN + 1,
+                                                               vblocker.remClipN + 1))
         //      choppedResults.collect().foreach { case (k, v) =>
         //        println("choppedResults: (%s,%s): %s".format(k._1, k._2, v.toVector)) }
         // ****
@@ -623,7 +633,6 @@ final case class LagDstrContext(@transient sc: SparkContext,
           .mapPartitionsWithIndex(zipChoppedResults, preservesPartitioning = true)
           .map { case (k, v) => Tuple2(k, GpiBvec(v)) }
         // ****
-        val vblocker = GpiDstrVectorBlocker(u.blocker.nrow, u.blocker.nblock)
         LagDstrVector(this, GpiDstrBvec(dstr, vblocker, result, vsSparse))
       }
     }

@@ -626,7 +626,7 @@ object TestMain {
             val nc = if (negate) {graphSizeRequested - colshift}
                 else graphSizeRequested + colshift
             if (nc > scala.math.min(nblock, nr) && nr > scala.math.min(nblock, nc)) {
-              if (DEBUG) println("LagDstrContext.mTm", nr, nc, nblock)
+              if (DEBUG) println("LagDstrContext.mTm3NSQ", nr, nc, nblock)
               val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
               val nA = Vector.tabulate(nr, nc)((r, c) => r * nc + c + 1.0)
               val nB = Vector.tabulate(nc, nr)((r, c) => r * nc + c + 101.0)
@@ -657,6 +657,61 @@ object TestMain {
     }
   }
 
+  // ********
+//  test("LagDstrContext.mTv3NSQ") {
+  def LagDstrContext_mTv3NSQ(sc: SparkContext): Unit = {
+    val DEBUG = true
+    val add_mul = LagSemiring.plus_times[Double]
+    val denseGraphSizes = (1 until 16).toList
+    val nblocks = (1 until 12).toList
+    for (graphSizeRequested <- denseGraphSizes) {
+      for (nblock <- nblocks) {
+        for (colshift <- List(1, 2, 3,
+            graphSizeRequested - 2, graphSizeRequested - 2, graphSizeRequested)) {
+          for (negate <- List(true, false)) {
+            val nr = graphSizeRequested
+            val nc = if (negate) {graphSizeRequested - colshift}
+                else graphSizeRequested + colshift
+            if (nc > scala.math.min(nblock, nr) && nr > scala.math.min(nblock, nc)) {
+              if (DEBUG) println("LagDstrContext.mTv3NSQ", nr, nc, nblock)
+              val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
+              // vector
+              val sparseValue = 0.0
+              val vMap = Map((0 until nc).map { r =>
+                (r.toLong, r.toDouble)
+              }: _*)
+              val v = hc.vFromMap[Double](nc, vMap, sparseValue)
+
+              // matrix
+              val mMap = Map((0 until nr).map { r =>
+                (0 until nc).map { c =>
+                  ((r.toLong, c.toLong), (r * nc + c).toDouble)
+                }
+              }.flatten: _*)
+              val m = hc.mFromMap[Double]((nr, nc), mMap, sparseValue)
+
+              // multiply
+              val u = hc.mTv(add_mul, m, v)
+
+              // back to map
+              val (uvm, uvmSparseValue) = hc.vToMap(u)
+              assert(uvmSparseValue == sparseValue)
+
+              // compare
+              val uvma = LagContext.vectorFromMap(nr, uvm, sparseValue)
+
+              val mva = Vector.tabulate(nr, nc)((r, c) => (r * nc + c).toDouble)
+              val vva = Vector.tabulate(nc, 1)((r, c) => r.toDouble)
+              val mua = mult(mva, vva)
+              val muat = mua.transpose
+              val ua = muat(0)
+              assert(ua.corresponds(uvma)(_ == _))
+            }
+          }
+        }
+      }
+    }
+  }
 
   // ********
 //  test("LagDstrContext.wolf2015task") {
@@ -785,7 +840,8 @@ object TestMain {
     //    TestMain.LagDstrContext_vZipWithIndex3(sc)
     //    TestMain.LagDstrContext_vZipWithIndexSparse3(sc)
     //    TestMain.LagDstrContext_mZipWithIndexSparse3(sc)
-    TestMain.LagDstrContext_mTm3NSQ(sc)
+    //    TestMain.LagDstrContext_mTm3NSQ(sc)
+    TestMain.LagDstrContext_mTv3NSQ(sc)
     //    TestMain.LagDstrContext_wolf2015task(sc)
   }
 }

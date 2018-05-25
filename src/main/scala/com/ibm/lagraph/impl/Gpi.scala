@@ -64,13 +64,13 @@ final case class GpiDstrMatrixBlocker(val size: (Long, Long),
   }
   def diagnose: Unit = {
     // scalastyle:off println
-    println("GpiDstrBlocker: nrow: >%s<, ncol: >%s<, nblockRequested: >%s<".format(
+    println("GpiDstrMatrixBlocker: nrow: >%s<, ncol: >%s<, nblockRequested: >%s<".format(
         nrow, ncol, nblockRequested))
-    println("GpiDstrBlocker: nblock: >%s<, clipN: >%s<, partitions: >%s<".format(
+    println("GpiDstrMatrixBlocker: nblock: >%s<, clipN: >%s<, partitions: >%s<".format(
         nblock, clipN, partitions))
-    println("GpiDstrBlocker: rStride: >%s<, rClipStride: >%s<".format(
+    println("GpiDstrMatrixBlocker: rStride: >%s<, rClipStride: >%s<".format(
         rStride, rClipStride))
-    println("GpiDstrBlocker: cStride: >%s<, cClipStride: >%s<".format(
+    println("GpiDstrMatrixBlocker: cStride: >%s<, cClipStride: >%s<".format(
         cStride, cClipStride))
     // scalastyle:on println
   }
@@ -137,15 +137,15 @@ final case class GpiDstrVectorBlocker(val nrow: Long,
   }
   def diagnose: Unit = {
     // scalastyle:off println
-    println("GpiDstrBlocker: nrow: >%s<, nblockRequested: >%s<".format(
+    println("GpiDstrVectorBlocker: nrow: >%s<, nblockRequested: >%s<".format(
         nrow, nblockRequested))
-    println("GpiDstrBlocker: nblock: >%s<, partitions: >%s<".format(
+    println("GpiDstrVectorBlocker: nblock: >%s<, partitions: >%s<".format(
         nblock, partitions))
-    println("GpiDstrBlocker: clipN: >%s<, stride: >%s<, clipStride: >%s<".format(
+    println("GpiDstrVectorBlocker: clipN: >%s<, stride: >%s<, clipStride: >%s<".format(
         clipN, stride, clipStride))
-    println("GpiDstrBlocker: vecClipN: >%s<, vecStride: >%s<, vecClipStride: >%s<".format(
+    println("GpiDstrVectorBlocker: vecClipN: >%s<, vecStride: >%s<, vecClipStride: >%s<".format(
       vecClipN, vecStride, vecClipStride))
-    println("GpiDstrBlocker: remClipN: >%s<, remStride: >%s<, remClipStride: >%s<".format(
+    println("GpiDstrVectorBlocker: remClipN: >%s<, remStride: >%s<, remClipStride: >%s<".format(
       remClipN, remStride, remClipStride))
     // scalastyle:on println
   }
