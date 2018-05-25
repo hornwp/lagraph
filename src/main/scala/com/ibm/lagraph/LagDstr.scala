@@ -632,21 +632,28 @@ final case class LagDstrContext(@transient sc: SparkContext,
                                                  mb: LagMatrix[T]): LagMatrix[T] = (ma, mb) match {
     case (maa: LagDstrMatrix[T], mba: LagDstrMatrix[T]) => {
       require(maa.dstrBmat.sparseValue == mba.dstrBmat.sparseValue,
-              "mTm does not currently support disparate sparsities")
+          "mTm does not currently support disparate sparsities")
+      val a_blocker = maa.dstrBmat.blocker
+      val b_blocker = mba.dstrBmat.blocker
+      require(a_blocker.clipN == b_blocker.clipN, "a.clipN: >%s< != b.clipN: >%s<)".format(
+          a_blocker.clipN, b_blocker.clipN))
+      val clipN = a_blocker.clipN
+      require(a_blocker.ncol == b_blocker.nrow, "(%s,%s) x (%s,%s) not supported".format(
+          a_blocker.nrow, a_blocker.ncol,
+          b_blocker.nrow, b_blocker.ncol))
       val msSparse = maa.dstrBmat.sparseValue
       val hcd = this
       val dstr = hcd.dstr
-      val blocker = maa.dstrBmat.blocker
-      val clipnp1 = blocker.clipN + 1
+      val clipnp1 = clipN + 1
       // functor to initialize partial result
       def initPartial(rc: (Int, Int)) = {
         val (r, c) = rc
-        val rChunk = if (r == blocker.clipN) blocker.rClipStride else blocker.rStride
-        val cChunk = if (c == blocker.clipN) blocker.cClipStride else blocker.cStride
+        val rChunk = if (r == clipN) a_blocker.rClipStride else a_blocker.rStride
+        val cChunk = if (c == clipN) b_blocker.cClipStride else b_blocker.cStride
         val vSparse = GpiAdaptiveVector.fillWithSparse[T](cChunk)(sr.zero)
         ((r, c), GpiAdaptiveVector.fillWithSparse(rChunk)(vSparse))
       }
-      val coordRdd = GpiDstr.getCoordRdd(sc, blocker.clipN + 1)
+      val coordRdd = GpiDstr.getCoordRdd(sc, clipN + 1)
       val Partial = coordRdd.cartesian(coordRdd).map(initPartial)
       //      Partial.collect().foreach { case (k, v) => println(
       //        "Partial: (%s,%s): %s".format(k._1, k._2, GpiSparseRowMatrix.toString(v))) }
@@ -707,8 +714,8 @@ final case class LagDstrContext(@transient sc: SparkContext,
                     Iterable[GpiBmat[T]]))) = {
             val r = kv._1._1
             val c = kv._1._2
-            val rChunk = if (r == blocker.clipN) blocker.rClipStride else blocker.rStride
-            val cChunk = if (c == blocker.clipN) blocker.cClipStride else blocker.cStride
+            val rChunk = if (r == clipN) a_blocker.rClipStride else a_blocker.rStride
+            val cChunk = if (c == clipN) b_blocker.cClipStride else b_blocker.cStride
             val cPartial = kv._2._1.iterator.next()
             val cAa = kv._2._2.iterator.next().a
             val cBa = kv._2._3.iterator.next().a
@@ -752,8 +759,8 @@ final case class LagDstrContext(@transient sc: SparkContext,
 
       // ********
       def toRcv(kv: ((Int, Int), GpiAdaptiveVector[GpiAdaptiveVector[T]])) = {
-        val arOff = kv._1._1.toLong * blocker.rStride.toLong
-        val acOff = kv._1._2.toLong * blocker.cStride.toLong
+        val arOff = kv._1._1.toLong * a_blocker.rStride.toLong
+        val acOff = kv._1._2.toLong * b_blocker.cStride.toLong
         val ac = kv._1._2
         var res = List[((Long, Long), T)]()
         val itr = kv._2.denseIterator

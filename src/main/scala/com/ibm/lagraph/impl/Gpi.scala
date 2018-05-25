@@ -64,8 +64,8 @@ final case class GpiDstrMatrixBlocker(val size: (Long, Long),
   }
   def diagnose: Unit = {
     // scalastyle:off println
-    println("GpiDstrBlocker: nrow: >%s<, nblockRequested: >%s<".format(
-        nrow, nblockRequested))
+    println("GpiDstrBlocker: nrow: >%s<, ncol: >%s<, nblockRequested: >%s<".format(
+        nrow, ncol, nblockRequested))
     println("GpiDstrBlocker: nblock: >%s<, clipN: >%s<, partitions: >%s<".format(
         nblock, clipN, partitions))
     println("GpiDstrBlocker: rStride: >%s<, rClipStride: >%s<".format(
@@ -470,7 +470,7 @@ class GpiDstr(val nblockRequested: Int, DEBUG: Boolean = false)
     //        k._1, k._2, GpiSparseRowMatrix.toString(v.asInstanceOf[GpiBmatAdaptive[MS]].a))) }
 
     // create DstrBmat
-    val dstrBmatLoaded = GpiDstrBmat(this, blocker, matrixRdd, blocker.nrow, blocker.nrow, msSparse)
+    val dstrBmatLoaded = GpiDstrBmat(this, blocker, matrixRdd, blocker.nrow, blocker.ncol, msSparse)
 
     // obtain count and force checkpoint
     val t0 = System.nanoTime()

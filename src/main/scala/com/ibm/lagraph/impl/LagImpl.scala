@@ -36,8 +36,8 @@ final case class LagDstrMatrix[T: ClassTag](override val hc: LagContext,
   //  override def size = (dstrBmat.nrow, dstrBmat.ncol)
   override lazy val _transpose: LagMatrix[T] = hc match {
     case hca: LagDstrContext => {
-      hca.mFromRcvRdd((dstrBmat.nrow,
-                      dstrBmat.ncol),
+      hca.mFromRcvRdd((dstrBmat.ncol,
+                      dstrBmat.nrow),
                       rcvRdd.map { case (k, v) => ((k._2, k._1), v) },
                       dstrBmat.sparseValue)
     } // this.hc.mTranspose(this)
