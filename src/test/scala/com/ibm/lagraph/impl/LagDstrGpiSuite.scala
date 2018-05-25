@@ -209,7 +209,6 @@ class LagDstrGpiSuite extends FunSuite with Matchers with SharedSparkContext {
 
   test("LagDstrContext.mTm3NSQ") {
 //  def LagDstrContext_mTm3NSQ(sc: SparkContext): Unit = {
-    val DEBUG = true
     val add_mul = LagSemiring.plus_times[Double]
     val denseGraphSizes = (1 until 16).toList
     val nblocks = (1 until 12).toList
@@ -227,8 +226,6 @@ class LagDstrGpiSuite extends FunSuite with Matchers with SharedSparkContext {
               val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
               val nA = Vector.tabulate(nr, nc)((r, c) => r * nc + c + 1.0)
               val nB = Vector.tabulate(nc, nr)((r, c) => r * nc + c + 101.0)
-              println(nA)
-              println(nB)
               val sparseValue = 0.0
               val mA =
                 hc.mFromMap((nr, nc),
