@@ -37,8 +37,9 @@ final case class GpiDstrMatrixBlocker(val size: (Long, Long),
           "requested number_of_blocks: >%s< must be > 0".format(nblockRequested))
   val (nrow, ncol) = size
   val nblock = if (nblockRequested > nrow) nrow.toInt else nblockRequested
-  require(ncol >= nblock, "current design precludes ncol: >%s< < nblock: >%s<".
-      format(ncol, nblock))
+  require(ncol >= nblock, "current design precludes ncol: >%s< < nblock: >%s<" +
+      "try lowering nblock to: >%s<".
+      format(ncol, nblock, ncol))
   val partitions = nblock * nblock
   // clipping
   private def computeClip(n: Long, nblock: Int): Tuple2[Int, Int] =
