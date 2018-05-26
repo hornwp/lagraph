@@ -485,11 +485,10 @@ final case class LagDstrContext(@transient sc: SparkContext,
         require(A.blocker.nblock == u.blocker.nblock,
             "current design precludes disparate blocks: " +
             "M.block: >%s< < u.block: >%s<, " +
-            "try lowering nblock to: >%s<".
+            "try reducing nblock to: >%s<".
             format(A.blocker.nblock, u.blocker.nblock,
                 scala.math.min(A.blocker.nblock, u.blocker.nblock)))
         val nblock = A.blocker.nblock
-//        assert (A.blocker == u.blocker)
         // ********
         // distribution functor
         def distributeVector(

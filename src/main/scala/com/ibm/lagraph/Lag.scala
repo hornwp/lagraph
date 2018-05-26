@@ -344,7 +344,7 @@ object LagSemiring {
   *
   *  @param T the type of the vertex
   *  @param hc the LagContext
-  *  @param size the length of the vector
+  *  @param size the size of the vector (nrow)
   */
 abstract class LagVector[T: ClassTag] protected (val hc: LagContext, val size: Long)
     extends Serializable {
@@ -514,7 +514,7 @@ abstract class LagVector[T: ClassTag] protected (val hc: LagContext, val size: L
   *  @tparam T the type of elements in the matrix
   *
   *  @param hc the LagContext
-  *  @param size A (Long, Long) pair representing the dimension of the matrix
+  *  @param size A (Long, Long) pair representing the dimension of the matrix: (nrow, ncol)
   */
 abstract class LagMatrix[T: ClassTag] protected (val hc: LagContext, val size: (Long, Long))
     extends Serializable {

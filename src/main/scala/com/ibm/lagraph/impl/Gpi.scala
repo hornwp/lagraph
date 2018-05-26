@@ -38,7 +38,7 @@ final case class GpiDstrMatrixBlocker(val size: (Long, Long),
   val (nrow, ncol) = size
   val nblock = if (nblockRequested > nrow) nrow.toInt else nblockRequested
   require(ncol >= nblock, "current design precludes ncol: >%s< < nblock: >%s<" +
-      "try lowering nblock to: >%s<".
+      "try reducing nblock to: >%s<".
       format(ncol, nblock, ncol))
   val partitions = nblock * nblock
   // clipping
