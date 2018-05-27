@@ -767,8 +767,8 @@ object TestMain {
 
     // for verbose printing
     def long2Str(l: Long): String = {
-      if (l == LongInf) "zero"
-      else if (l == LongInf - 1L) " one"
+      if (l == LongInf) " inf"
+      else if (l == LongInf - 1L) "inf1"
       else "%4d".format(l)
     }
 
@@ -858,7 +858,7 @@ object TestMain {
       .map{e => if (e._1 < e._2) (e._1, e._2) else (e._2, e._1)}
       .zipWithIndex()
       .flatMap{ei => List(
-          ((ei._1._1, ei._2), (LongInf, ei._1._1, ei._1._2)),
+          ((ei._1._1, ei._2), (LongInf, LongInf, ei._1._2)),
           ((ei._1._2, ei._2), (LongInf, LongInf, ei._1._1)))}
 
 
