@@ -651,6 +651,8 @@ final case class LagDstrContext(@transient sc: SparkContext,
       require(a_blocker.ncol == b_blocker.nrow, "(%s,%s) x (%s,%s) not supported".format(
           a_blocker.nrow, a_blocker.ncol,
           b_blocker.nrow, b_blocker.ncol))
+      //      a_blocker.diagnose
+      //      b_blocker.diagnose
       val msSparse = maa.dstrBmat.sparseValue
       val hcd = this
       val dstr = hcd.dstr
@@ -660,8 +662,8 @@ final case class LagDstrContext(@transient sc: SparkContext,
         val (r, c) = rc
         val rChunk = if (r == clipN) a_blocker.rClipStride else a_blocker.rStride
         val cChunk = if (c == clipN) b_blocker.cClipStride else b_blocker.cStride
-        val vSparse = GpiAdaptiveVector.fillWithSparse[T](cChunk)(sr.zero)
-        ((r, c), GpiAdaptiveVector.fillWithSparse(rChunk)(vSparse))
+        val vSparse = GpiAdaptiveVector.fillWithSparse[T](rChunk)(sr.zero)
+        ((r, c), GpiAdaptiveVector.fillWithSparse(cChunk)(vSparse))
       }
       val coordRdd = GpiDstr.getCoordRdd(sc, clipN + 1)
       val Partial = coordRdd.cartesian(coordRdd).map(initPartial)
@@ -670,6 +672,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
       val A = maa.dstrBmat
       val BT = mba.transpose.asInstanceOf[LagDstrMatrix[T]].dstrBmat
       //      println(A)
+      //      println(mba.dstrBmat)
       //      println(BT)
       // ********
       // top level
@@ -701,7 +704,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
           // ********
           // permutations
 
-          //        def dbgprint(a:RDD[((Int, Int), GpiBmatAdaptive[T])]):Unit = {
+          //        def dbgprint(a:RDD[((Int, Int), GpiBmat[T])]):Unit = {
           //          val ca = a.collect()
           //          ca.foreach{case (k, v) =>
           //            {println(k);println(GpiSparseRowMatrix.toString(v.a))}}
@@ -724,8 +727,6 @@ final case class LagDstrContext(@transient sc: SparkContext,
                     Iterable[GpiBmat[T]]))) = {
             val r = kv._1._1
             val c = kv._1._2
-            val rChunk = if (r == clipN) a_blocker.rClipStride else a_blocker.rStride
-            val cChunk = if (c == clipN) b_blocker.cClipStride else b_blocker.cStride
             val cPartial = kv._2._1.iterator.next()
             val cAa = kv._2._2.iterator.next().a
             val cBa = kv._2._3.iterator.next().a
@@ -738,8 +739,8 @@ final case class LagDstrContext(@transient sc: SparkContext,
                                                 cBa,
                                                 Option(msSparse),
                                                 Option(msSparse))
-            // println("CALC1: (r,c): (%s,%s), (rChunk,cChunk):
-            //    (%s,%s), ipartial: >%s<, cpartial: >%s<".format(r,c,rChunk, cChunk,
+            // println("CALC1: (r,c): (%s,%s), ipartial: >%s<, cpartial: >%s<".format(r,c,
+            //    (%s,%s), ipartial: >%s<, cpartial: >%s<".format(r,c,
             // GpiSparseRowMatrix.toString(iPartial),GpiSparseRowMatrix.toString(cPartial)))
             // println("CALC3:", iPartial.size,iPartial(0).size,cPartial.size,cPartial(0).size)
             // println("WHAT3a!",iPartial)
