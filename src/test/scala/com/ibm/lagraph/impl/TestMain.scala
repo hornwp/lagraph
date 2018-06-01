@@ -971,6 +971,9 @@ object TestMain {
       else if (l == LongInf - 1L) "inf1"
       else "%4d".format(l)
     }
+    def boolean2Str(l: Boolean): String = {
+      if (l) " true" else "false"
+    }
 
     def trussType2Str(d: (Long, Long, Long)): String = {
       val d1 = long2Str(d._1)
@@ -1069,17 +1072,21 @@ object TestMain {
           ((e._1, e._2), LongOne),
           ((e._2, e._1), LongOne)) }
 
+    // conventional plus_times semiring for Long
+    val sr = LagSemiring.plus_times[Long]
+
     // use distributed context-specific utility to convert from RDD to
     // adjacency LagMatrix
     val Aadj = hc.mFromRcvRdd((numv, numv), A, LongZero) // WolfSemiring.zero)
     println("Aadj: >\n%s<".format(hc.mToString(Aadj, long2Str)))
 
     // define incidence matrix
-    val E = Ein
+    // E = sparse( ii(:,1), ii(:,2), ii(:,3) );
+    val Einc = Ein
       .map{e => ((e._1, e._2), LongOne)}
 
 
-    val nume = E.max()(
+    val nume = Einc.max()(
         new Ordering[Tuple2[Tuple2[Long, Long], Long]]() {
       override def compare(
           x: ((Long, Long), (Long)),
@@ -1088,82 +1095,92 @@ object TestMain {
     })._1._2 + 1L
     println("nume: >%s<".format(nume))
 
+    // some handy constant
+    val e0 = hc.vReplicate(nume, 0L, Option(0L))
+    val e1 = hc.vReplicate(nume, 1L, Option(0L))
+
     // use distributed context-specific utility to convert from RDD to
     // adjacency LagMatrix
-    val Einc = hc.mFromRcvRdd((numv, nume), E, LongZero)
-    println("Einc: >\n%s<".format(hc.mToString(Einc, long2Str)))
+    val E = hc.mFromRcvRdd((numv, nume), Einc, LongZero)
+    println("E: >\n%s<".format(hc.mToString(E, long2Str)))
 
-    val sr = LagSemiring.plus_times[Long]
 
-    val d = hc.mTv(
-        sr,
-        Einc,
-        hc.vReplicate(nume, 1L, Option(0L)))
-    println("d: >\n%s<".format(hc.vToString(d, long2Str)))
+//    val d = hc.mTv(
+//        sr,
+//        E,
+//        hc.vReplicate(nume, 1L, Option(0L)))
+//    println("d: >\n%s<".format(hc.vToString(d, long2Str)))
 
-    val tmp = hc.mTm(sr, Einc.transpose, Einc)
+    // tmp = E.'*E;
+    val tmp = E.transpose.tM(sr, E)
     println("tmp: >\n%s<".format(hc.mToString(tmp, long2Str)))
 
+    // R = E* (tmp-diag(diag(tmp)));
     def diag(v: Long, k: (Long, Long)): Long =
       if (k._1 == k._2) 0L else v
     val tmpd = tmp.zipWithIndex(diag)
     println("tmpd: >\n%s<".format(hc.mToString(tmpd, long2Str)))
 
-    val R = hc.mTm(sr, Einc, tmpd)
+    val R = hc.mTm(sr, E, tmpd)
     println("R: >\n%s<".format(hc.mToString(R, long2Str)))
 
-    def r2(e: Long): Long = {
-      if (e == 2) 1L else 0L
-    }
-
-    val R2 = R.map(r2)
+    // s = sum(double(R==2),2);
+    val R2 = R.map(e => if (e == 2) 1L else 0L)
     println("R2: >\n%s<".format(hc.mToString(R2, long2Str)))
-
-    val s = hc.mTv(
-        sr,
-        R2,
-        hc.vReplicate(nume, 1L, Option(0L)))
+    val s = hc.mTv(sr, R2, e1)
     println("s: >\n%s<".format(hc.vToString(s, long2Str)))
 
+    // functor for determing the number of non-zeros
+    def nnz(s: LagVector[Long]): Long = {
+      // number of non-zeros
+      s.reduce(sr.addition, sr.addition, 0L)
+    }
+
+//    def any(a: Long, b: Long): Long = {
+//      val aa = if (a != 0L) 1L else 0L
+//      val bb = if (b != 0L) 1L else 0L
+//      aa + bb
+//    }
+
+    // while nnz(xc) ~= nnz(any(E,2))
+    def recurse(xc: LagVector[Long], E: LagMatrix[Long]): LagMatrix[Long] =
+      if (nnz(xc) == nnz(E.tV(
+          sr,
+          hc.vReplicate(nume, 1L, Option(0L))
+          ).map{v => if (v != 0) 1L else 0L}))
+      { E } else {
+        //   E(not(xc),:) = 0;
+        val xcNot = xc.map( x => if (x!=0L) false else true)
+        println("xcNot: >\n%s<".format(hc.vToString(xcNot, boolean2Str)))
+        val EnotXc = E.vToRow(xcNot, hc.vReplicate(nume, 0L, Option(0L)))
+        println("EnotXc: >\n%s<".format(hc.mToString(EnotXc, long2Str)))
+        // tmp = E.'*E;
+        val tmp = EnotXc.transpose.tM(sr, EnotXc)
+        println("tmp: >\n%s<".format(hc.mToString(tmp, long2Str)))
+        //   R = E* (tmp-diag(diag(tmp)));
+        val R = hc.mTm(sr, E, tmpd)
+        println("R: >\n%s<".format(hc.mToString(R, long2Str)))
+        //   s = sum(double(R==2),2);
+        val R2 = R.map(e => if (e == 2) 1L else 0L)
+        println("R2: >\n%s<".format(hc.mToString(R2, long2Str)))
+        val s = hc.mTv(sr, R2, e1)
+        println("s: >\n%s<".format(hc.vToString(s, long2Str)))
+        //    xc = s >= k-2;
+        val xcNext = gekm2(s)
+        println("xcNext: >\n%s<".format(hc.vToString(xcNext, long2Str)))
+        recurse(xcNext, EnotXc)
+      }
+    // xc = s >= k-2;
+    // functor for " >= k-2 "
     def gekm2(s: LagVector[Long]): LagVector[Long] = {
       // xc = s >= k-2;
       def f(x: Long) = if (x >= k - 2) 1L else 0L
       s.map(f)
     }
-
-    def nnz(s: LagVector[Long]): Long = {
-      // xc = s >= k-2;
-      s.reduce(sr.addition, sr.addition, 0L)
-    }
-
-    def any(a: Long, b: Long): Long = {
-      val aa = if (a > 1L) 1L else 0L
-      val bb = if (b > 1L) 1L else 0L
-      aa + bb
-    }
-
-    def recurse(xc: LagVector[Long], E: LagMatrix[Long]): LagMatrix[Long] =
-      if (nnz(xc) == E.transpose.tV(sr,
-          hc.vReplicate(nume, 1L, Option(0L))).reduce(any, any, 0L)){ E } else {
-        val Enext = E.transpose.tV(sr, xc)
-        throw new NotImplementedError("vToMrow: TBD")
-      }
-//    val count = hc.mTv(
-//        sr,
-//        s,
-//        hc.vReplicate(nume, 1L, Option(0L))).
-//        reduce(sr.addition, sr.addition, 0L)
-
-  }
-
-  def isolate(sc: SparkContext): Unit = {
-    val numv = 5L
-    val nblock = 2 // set parallelism (blocks on one axis)
-    val hc = LagContext.getLagDstrContext(sc, nblock)
-    val s_final_test = hc.vReplicate(numv, 99)
-    val s_i = hc.vSet(hc.vReplicate(numv, 99), 4, -99)
-    val test = hc.vEquiv(s_final_test, s_i)
-    println("test: >%s<".format(test))
+    val xc = gekm2(s)
+    println("xc: >\n%s<".format(hc.vToString(xc, long2Str)))
+    val Efinal = recurse(xc, E)
+    println("Efinal: >\n%s<".format(hc.mToString(Efinal, long2Str)))
   }
   def main(args: Array[String]): Unit = {
     Logger.getLogger("org").setLevel(Level.OFF)
@@ -1175,25 +1192,14 @@ object TestMain {
     val master = "local[1]"
     println("master: >%s<".format(master))
     val sc = new SparkContext(master, "TestMain")
-    //    TestMain.testit(sc)
-    //    TestMain.LagDstrContext_vFromMap_Dense(sc)
-    //    TestMain.LagDstrContext_vIndices(sc)
-    //    TestMain.LagDstrContext_vIndices2(sc)
-    //    TestMain.LagDstrContext_vIndices3(sc)
-    //    TestMain.LagDstrContext_vZip(sc)
-    //        TestMain.LagDstrContext_vZip3(sc)
-    //    TestMain.LagSmpContext_vReduceWithIndex(sc)
-    //    TestMain.fundamentalPrimsForPub(sc)
-    //        isolate(sc)
-    //        TestMain.LagDstrContext_vEquiv3(sc)
-    //    TestMain.LagDstrContext_vZipWithIndex3(sc)
-    //    TestMain.LagDstrContext_vZipWithIndexSparse3(sc)
-    //    TestMain.LagDstrContext_mZipWithIndexSparse3(sc)
-    TestMain.LagDstrContext_mTmV3(sc)
-    TestMain.LagDstrContext_mTvV3(sc)
-    TestMain.LagDstrContext_vToMrowV3(sc)
+    //    TestMain.LagDstrContext_vZipWithIndexV3(sc)
+    //    TestMain.LagDstrContext_vZipWithIndexSparseV3(sc)
+    //    TestMain.LagDstrContext_mZipWithIndexSparseV3(sc)
+//    TestMain.LagDstrContext_mTmV3(sc)
+//    TestMain.LagDstrContext_mTvV3(sc)
+//    TestMain.LagDstrContext_vToMrowV3(sc)
 //    TestMain.LagDstrContext_wolf2015task(sc)
-//    TestMain.LagDstrContext_truss(sc)
+    TestMain.LagDstrContext_truss(sc)
   }
 }
 // scalastyle:on println
