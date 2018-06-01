@@ -258,6 +258,142 @@ final case class LagDstrContext(@transient sc: SparkContext,
       }
     }.flatten: _*), x)
   }
+  // experimental
+  override def vToMrow[T: ClassTag](
+      m: LagMatrix[T], maskV: LagVector[Boolean], u: LagVector[T]): LagMatrix[T] =
+    (m, maskV, u) match {
+      case (ldm: LagDstrMatrix[T], ldk: LagDstrVector[Boolean], ldu: LagDstrVector[T]) => {
+        require(
+          ldm.dstrBmat.sparseValue == ldu.dstrBvec.sparseValue,
+          "vToMrow does not currently support disparate sparsities:" +
+          " matrix sparseValue: >%s<, vector sparseValue: >%s<"
+            .format(ldm.dstrBmat.sparseValue, ldu.dstrBvec.sparseValue)
+        )
+        val mSparse = ldu.dstrBvec.sparseValue
+        val A = ldm.dstrBmat
+        val k = ldk.dstrBvec
+        val u = ldu.dstrBvec
+        require(A.blocker.nblock == u.blocker.nblock,
+            "current design precludes disparate blocks: " +
+            "M.block: >%s< != u.block: >%s<, " +
+            "try reducing nblock to: >%s<".
+            format(A.blocker.nblock, u.blocker.nblock,
+                scala.math.min(A.blocker.nblock, u.blocker.nblock)))
+        require(A.blocker.nblock == k.blocker.nblock,
+            "current design precludes disparate blocks: " +
+            "M.block: >%s< != k.block: >%s<, " +
+            "try reducing nblock to: >%s<".
+            format(A.blocker.nblock, k.blocker.nblock,
+                scala.math.min(A.blocker.nblock, k.blocker.nblock)))
+        val nblock = A.blocker.nblock
+        // ********
+        // distribution functor for k
+        def kDistributeVector(
+            kv: ((Int, Int), GpiBvec[Boolean])): List[((Int, Int), (Int, GpiBvec[Boolean]))] = {
+          val empty = List[((Int, Int), (Int, GpiBvec[Boolean]))]()
+          val (r, c) = kv._1
+          val gxa = kv._2.asInstanceOf[GpiBvec[Boolean]]
+          def recurse(rdls: List[((Int, Int), (Int, GpiBvec[Boolean]))],
+                      targetBlock: Int): List[((Int, Int), (Int, GpiBvec[Boolean]))] =
+            if (targetBlock == k.blocker.clipN + 1) rdls
+            else {
+              recurse(((r, targetBlock), (c, gxa)) :: rdls, targetBlock + 1)
+            }
+          recurse(empty, 0)
+        }
+        val ksrb = k.vecRdd.flatMap(kDistributeVector)
+        // ********
+        // distribution functor for u
+        def distributeVector(
+            kv: ((Int, Int), GpiBvec[T])): List[((Int, Int), (Int, GpiBvec[T]))] = {
+          val empty = List[((Int, Int), (Int, GpiBvec[T]))]()
+          val (r, c) = kv._1
+          val gxa = kv._2.asInstanceOf[GpiBvec[T]]
+          def recurse(rdls: List[((Int, Int), (Int, GpiBvec[T]))],
+                      targetBlock: Int): List[((Int, Int), (Int, GpiBvec[T]))] =
+            if (targetBlock == u.blocker.clipN + 1) rdls
+            else {
+              recurse(((targetBlock, r), (c, gxa)) :: rdls, targetBlock + 1)
+            }
+          recurse(empty, 0)
+        }
+        val srb = u.vecRdd.flatMap(distributeVector)
+        // ********
+        // calculation functor
+        def calculate(kv: ((Int, Int), (
+            Iterable[GpiBmat[T]],
+            Iterable[(Int, GpiBvec[Boolean])],
+            Iterable[(Int, GpiBvec[T])]))): ((Int, Int), GpiBmat[T]) = {
+          val r = kv._1._1
+          val c = kv._1._2
+          // matrix
+          val cAa = kv._2._1.iterator.next().a
+          // mask vector
+          val kstride = k.blocker.getVectorStride(r, c)
+          val (kvclipn, kvstride, kvclipstride) = k.blocker.getVectorStrides(r)
+          val ksortedU = Array.fill[GpiAdaptiveVector[Boolean]](kvclipn + 1)(null)
+          val kit = kv._2._2.iterator
+          while (kit.hasNext) {
+            val (k, v) = kit.next()
+            ksortedU(k) = v.u
+          }
+          val kxxx = GpiAdaptiveVector.concatenateToDense(ksortedU)
+          // value vector
+          val stride = u.blocker.getVectorStride(r, c)
+          val (vclipn, vstride, vclipstride) = u.blocker.getVectorStrides(c)
+          val sortedU = Array.fill[GpiAdaptiveVector[T]](vclipn + 1)(null)
+          val it = kv._2._3.iterator
+          while (it.hasNext) {
+            val (k, v) = it.next()
+            sortedU(k) = v.u
+          }
+          val xxx = GpiAdaptiveVector.concatenateToSparse(sortedU)
+          // perform assignment
+          val rStride = if (r == A.blocker.clipN) A.blocker.rClipStride else A.blocker.rStride
+          val cStride = if (c == A.blocker.clipN) A.blocker.cClipStride else A.blocker.cStride
+          val vSparse = GpiAdaptiveVector.fillWithSparse[T](cStride)(mSparse)
+          val rBuffer = ArrayBuffer.fill(rStride)(vSparse)
+          def assign(i: Int,
+              rb: ArrayBuffer[GpiAdaptiveVector[T]]): ArrayBuffer[GpiAdaptiveVector[T]] = {
+            if (i == cAa.size) rb else {
+              if (kxxx(i)) rb(i) = xxx else rb(i) = cAa(i)
+              assign(i + 1, rb)
+            }
+          }
+          assign(0, rBuffer)
+          val cAb = GpiAdaptiveVector.fromSeq(rBuffer, vSparse)
+          ((r, c), GpiBmat(cAb))
+        }
+        val newMatRdd = A.matRdd.cogroup(ksrb, srb).map(calculate)
+        // ********
+        // TODO replace w/ bmatToRcvRdd ?
+        def toRcv(kv: ((Int, Int), GpiBmat[T])) = {
+          val a = kv._2.a
+          val arOff = kv._1._1.toLong * A.blocker.rStride.toLong
+          val acOff = kv._1._2.toLong * A.blocker.cStride.toLong
+          val ac = kv._1._2
+          var res = List[((Long, Long), T)]()
+          val itr = a.denseIterator
+          while (itr.hasNext) {
+            val (ir, rv) = itr.next()
+            val itc = rv.denseIterator
+            while (itc.hasNext) {
+              val (ic, v) = itc.next()
+              res = ((arOff + ir.toLong, acOff + ic.toLong), v) :: res
+            }
+          }
+          res
+        }
+        val newRcvRdd = newMatRdd.flatMap(toRcv)
+        val B = GpiDstrBmat(A.dstr,
+                            A.blocker,
+                            newMatRdd,
+                            A.nrow,
+                            A.ncol,
+                            A.sparseValue)
+        LagDstrMatrix(ldm.hc, newRcvRdd, B)
+      }
+  }
 
   // *****
   // vector function
@@ -317,19 +453,85 @@ final case class LagDstrContext(@transient sc: SparkContext,
     //      GpiOps.gpi_reduce(f, z, uinds)
     //    }
   }
+  // *****
+  private[lagraph] def bmatToRcvRdd[T](
+      blocker: GpiDstrMatrixBlocker,
+      matRdd: RDD[((Int, Int), GpiBmat[T])]): RDD[((Long, Long), T)] = {
+//        // *****
+//        val rstridel = blocker.rStride.toLong
+//        val cstridel = blocker.cStride.toLong
+//        def perblock(input: ((Int, Int), GpiBmat[T])): List[((Long, Long), T)] = {
+//          val rblockl = input._1._1.toLong
+//          val cblockl = input._1._2.toLong
+//          val mata = input._2
+//          //          val mata = mato
+//          //          mato match {
+//          //            case mata: GpiBmatAdaptive[T3] => {
+//          if (mata.a.denseCount == 0) {
+//            List()
+//          } else {
+//            val xxx = mata.a.denseIterator.toList.map {
+//              case (ri: Int, r) => {
+//                r.denseIterator.toList.map {
+//                  case (ci: Int, v) => {
+//                    ((rblockl * rstridel + ri.toLong, cblockl * cstridel + ci.toLong), v)
+//                  }
+//                }
+//              }
+//            }
+//            xxx.reduceLeft(_ ::: _)
+//          }
+//          //            }
+//          //          }
+//        }
+//        matRdd.flatMap(perblock)
+//      }
+        // ********
+    def toRcv(kv: ((Int, Int), GpiBmat[T])) = {
+      val a = kv._2.a
+      val arOff = kv._1._1.toLong * blocker.rStride.toLong
+      val acOff = kv._1._2.toLong * blocker.cStride.toLong
+      val ac = kv._1._2
+      var res = List[((Long, Long), T)]()
+      val itr = a.denseIterator
+      while (itr.hasNext) {
+        val (ir, rv) = itr.next()
+        val itc = rv.denseIterator
+        while (itc.hasNext) {
+          val (ic, v) = itc.next()
+          res = ((arOff + ir.toLong, acOff + ic.toLong), v) :: res
+        }
+      }
+      res
+    }
+    matRdd.flatMap(toRcv)
+  }
 
   // *****
-  private[lagraph] override def mMap[T1: ClassTag, T2: ClassTag](f: (T1) => T2,
-                                                                 m: LagMatrix[T1]): LagMatrix[T2] =
-    m match {
-      case ma: LagDstrMatrix[_] => {
-        //      def perrow(v: GpiAdaptiveVector[T1]): GpiAdaptiveVector[T2] = {
-        //        GpiOps.gpi_map(f, v)
-        //      }
-        //      LagDstrMatrix(dstr.dstr_map(perrow, ma.dstrBmat))
-        throw new NotImplementedError("mMap: TBD")
+  private[lagraph] override def mMap[T1: ClassTag, T2: ClassTag](
+      f: (T1) => T2,
+      m: LagMatrix[T1]): LagMatrix[T2] = (m) match {
+    case (ma: LagDstrMatrix[T1]) => {
+      val sparseValue = f(ma.dstrBmat.sparseValue)
+      val dstrBmat = {
+        def perblock(bmat: GpiBmat[T1]): GpiBmat[T2] = {
+          def perrow(mv: GpiAdaptiveVector[T1]): GpiAdaptiveVector[T2] = {
+            GpiOps.gpi_map(f, mv)
+          }
+          val vovMap = GpiOps.gpi_map(perrow, bmat.a)
+          GpiBmat(vovMap)
+        }
+        val matRdd = ma.dstrBmat.matRdd.mapValues {
+          mb => perblock(mb)
+        }
+        GpiDstrBmat(ma.dstrBmat.dstr, ma.dstrBmat.blocker,
+                    matRdd, ma.dstrBmat.nrow, ma.dstrBmat.ncol, sparseValue)
       }
+      val rcvRdd = bmatToRcvRdd(ma.dstrBmat.blocker, dstrBmat.matRdd)
+      LagDstrMatrix(m.hc, rcvRdd, dstrBmat)
+
     }
+  }
   private[lagraph] override def mZip[T1: ClassTag, T2: ClassTag, T3: ClassTag](
       f: (T1, T2) => T3,
       m: LagMatrix[T1],
@@ -361,36 +563,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
         GpiDstrBmat(ma.dstrBmat.dstr, ma.dstrBmat.blocker,
                     matRdd, ma.dstrBmat.nrow, ma.dstrBmat.ncol, sparseValue)
       }
-      val rcvRdd = {
-        // *****
-        val rstridel = ma.dstrBmat.blocker.rStride.toLong
-        val cstridel = ma.dstrBmat.blocker.cStride.toLong
-        def perblock(input: ((Int, Int), GpiBmat[T3])): List[((Long, Long), T3)] = {
-          val rblockl = input._1._1.toLong
-          val cblockl = input._1._2.toLong
-          val mata = input._2
-          //          val mata = mato
-          //          mato match {
-          //            case mata: GpiBmatAdaptive[T3] => {
-          if (mata.a.denseCount == 0) {
-            List()
-          } else {
-            val xxx = mata.a.denseIterator.toList.map {
-              case (ri: Int, r) => {
-                r.denseIterator.toList.map {
-                  case (ci: Int, v) => {
-                    ((rblockl * rstridel + ri.toLong, cblockl * cstridel + ci.toLong), v)
-                  }
-                }
-              }
-            }
-            xxx.reduceLeft(_ ::: _)
-          }
-          //            }
-          //          }
-        }
-        dstrBmat.matRdd.flatMap(perblock)
-      }
+      val rcvRdd = bmatToRcvRdd(ma.dstrBmat.blocker, dstrBmat.matRdd)
       LagDstrMatrix(m.hc, rcvRdd, dstrBmat)
 
     }
@@ -473,6 +646,9 @@ final case class LagDstrContext(@transient sc: SparkContext,
                                         lv: LagVector[T]): LagVector[T] =
     (lm, lv) match {
       case (ldm: LagDstrMatrix[T], ldu: LagDstrVector[T]) => {
+        require(lm.size._2 == lv.size,
+            "mTv: size mismatch: M: >(%s,%s), v: >%s<".format(
+                lm.size._1, lm.size._2, lv.size))
         require(
           ldm.dstrBmat.sparseValue == ldu.dstrBvec.sparseValue,
           "mTv does not currently support disparate sparsities:" +
@@ -484,7 +660,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
         val u = ldu.dstrBvec
         require(A.blocker.nblock == u.blocker.nblock,
             "current design precludes disparate blocks: " +
-            "M.block: >%s< < u.block: >%s<, " +
+            "M.block: >%s< != u.block: >%s<, " +
             "try reducing nblock to: >%s<".
             format(A.blocker.nblock, u.blocker.nblock,
                 scala.math.min(A.blocker.nblock, u.blocker.nblock)))
@@ -572,7 +748,6 @@ final case class LagDstrContext(@transient sc: SparkContext,
         // ****
         // Blocker for resultant vector
         val vblocker = GpiDstrVectorBlocker(A.blocker.nrow, nblock)
-        vblocker.diagnose
         // ****
         // functor to chop and send
         def chopResults(
@@ -651,29 +826,29 @@ final case class LagDstrContext(@transient sc: SparkContext,
       require(a_blocker.ncol == b_blocker.nrow, "(%s,%s) x (%s,%s) not supported".format(
           a_blocker.nrow, a_blocker.ncol,
           b_blocker.nrow, b_blocker.ncol))
-      //      a_blocker.diagnose
-      //      b_blocker.diagnose
       val msSparse = maa.dstrBmat.sparseValue
       val hcd = this
       val dstr = hcd.dstr
       val clipnp1 = clipN + 1
-      // functor to initialize partial result
+
+      // ********
+      // get dstrBmat
+      val A = maa.dstrBmat
+      val BT = mba.transpose.asInstanceOf[LagDstrMatrix[T]].dstrBmat
+      val bt_blocker = BT.blocker
+
+      // ********
+      // initialize partial result
+      val partial_blocker = GpiDstrMatrixBlocker((mb.size._2, ma.size._1), clipnp1)
       def initPartial(rc: (Int, Int)) = {
         val (r, c) = rc
-        val rChunk = if (r == clipN) a_blocker.rClipStride else a_blocker.rStride
-        val cChunk = if (c == clipN) b_blocker.cClipStride else b_blocker.cStride
-        val vSparse = GpiAdaptiveVector.fillWithSparse[T](rChunk)(sr.zero)
-        ((r, c), GpiAdaptiveVector.fillWithSparse(cChunk)(vSparse))
+        val rChunk = if (r == clipN) partial_blocker.rClipStride else partial_blocker.rStride
+        val cChunk = if (c == clipN) partial_blocker.cClipStride else partial_blocker.cStride
+        val vSparse = GpiAdaptiveVector.fillWithSparse[T](cChunk)(sr.zero)
+        ((r, c), GpiAdaptiveVector.fillWithSparse(rChunk)(vSparse))
       }
       val coordRdd = GpiDstr.getCoordRdd(sc, clipN + 1)
       val Partial = coordRdd.cartesian(coordRdd).map(initPartial)
-      //      Partial.collect().foreach { case (k, v) => println(
-      //        "Partial: (%s,%s): %s".format(k._1, k._2, GpiSparseRowMatrix.toString(v))) }
-      val A = maa.dstrBmat
-      val BT = mba.transpose.asInstanceOf[LagDstrMatrix[T]].dstrBmat
-      //      println(A)
-      //      println(mba.dstrBmat)
-      //      println(BT)
       // ********
       // top level
       def recurse(contributingIndex: Int,
@@ -703,20 +878,8 @@ final case class LagDstrContext(@transient sc: SparkContext,
           }
           // ********
           // permutations
-
-          //        def dbgprint(a:RDD[((Int, Int), GpiBmat[T])]):Unit = {
-          //          val ca = a.collect()
-          //          ca.foreach{case (k, v) =>
-          //            {println(k);println(GpiSparseRowMatrix.toString(v.a))}}
-          //        }
-          //        println("****")
-          //        println("contributingIndex = %s".format(contributingIndex))
-          //        println("sra")
           val sra = rA.flatMap(selectA)
-          //        dbgprint(sra)
           val srb = rB.flatMap(selectB)
-          //        println("srb")
-          //        dbgprint(srb)
 
           // ********
           // calculation functor
@@ -739,39 +902,24 @@ final case class LagDstrContext(@transient sc: SparkContext,
                                                 cBa,
                                                 Option(msSparse),
                                                 Option(msSparse))
-            // println("CALC1: (r,c): (%s,%s), ipartial: >%s<, cpartial: >%s<".format(r,c,
-            //    (%s,%s), ipartial: >%s<, cpartial: >%s<".format(r,c,
-            // GpiSparseRowMatrix.toString(iPartial),GpiSparseRowMatrix.toString(cPartial)))
-            // println("CALC3:", iPartial.size,iPartial(0).size,cPartial.size,cPartial(0).size)
-            // println("WHAT3a!",iPartial)
-            // println("WHAT3b!",cPartial)
             val updatedPartial = GpiOps.gpi_zip(
               GpiOps.gpi_zip(sr.addition, _: GpiAdaptiveVector[T], _: GpiAdaptiveVector[T]),
               iPartial,
               cPartial)
-            // println("CALC2: (r,c): (%s,%s), updatedPartial: >%s<".format(
-            //   r,c,GpiSparseRowMatrix.toString(updatedPartial)))
             ((r, c), updatedPartial)
           }
           val nextPartial = rPartial.cogroup(sra, srb).map(calculate)
+
           // ********
           // recurse
-          //        println("nextPartial")
-          //        def dbgprint2(a:RDD[((Int, Int),
-          //                      GpiAdaptiveVector[GpiAdaptiveVector[T]])]):Unit = {
-          //          val ca = a.collect()
-          //          ca.foreach{case (k, v) => {println(k);
-          //            println(GpiSparseRowMatrix.toString(v))}}
-          //        }
-          //        dbgprint2(nextPartial)
           recurse(contributingIndex + 1, nextPartial, rA, rB)
         }
       val transposedResult = recurse(0, Partial, A.matRdd, BT.matRdd)
 
       // ********
       def toRcv(kv: ((Int, Int), GpiAdaptiveVector[GpiAdaptiveVector[T]])) = {
-        val arOff = kv._1._1.toLong * a_blocker.rStride.toLong
-        val acOff = kv._1._2.toLong * b_blocker.cStride.toLong
+        val arOff = kv._1._1.toLong * partial_blocker.rStride.toLong
+        val acOff = kv._1._2.toLong * partial_blocker.cStride.toLong
         val ac = kv._1._2
         var res = List[((Long, Long), T)]()
         val itr = kv._2.denseIterator
@@ -786,7 +934,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
         res
       }
       val rcvRdd = transposedResult.flatMap(toRcv)
-      hcd.mFromRcvRdd((ma.size._1, mb.size._2), rcvRdd.map {
+      hcd.mFromRcvRdd((partial_blocker.ncol, partial_blocker.nrow), rcvRdd.map {
         case (k, v) => ((k._2, k._1), v) }, msSparse)
 
       //  // for transpose ...
@@ -797,33 +945,6 @@ final case class LagDstrContext(@transient sc: SparkContext,
       //                maa.dstrBmat.sparseValue))
     }
   }
-  //  override def mTm[T: ClassTag](
-  //    sr: LagSemiring[T],
-  //    m: LagMatrix[T],
-  //    n: LagMatrix[T]): LagMatrix[T] = (m, n) match {
-  //    case (ma: LagDstrMatrix[T], na: LagDstrMatrix[T]) => {
-  //      //      LagDstrMatrix(dstr.dstr_m_times_m(
-  //      //        sr.addition,
-  //      //        sr.addition,
-  //      //        sr.multiplication,
-  //      //        sr.zero,
-  //      //        ma.dstrBmat,
-  //      //        na.dstrBmat))
-  //      throw new NotImplementedError("mTm: TBD")
-  //    }
-  //    //  def dstr_m_times_m[T1: ClassTag, T2: ClassTag, T3: ClassTag, T4: ClassTag](
-  //    //    f: (T3, T4) => T4,
-  //    //    c: (T4, T4) => T4,
-  //    //    g: (T2, T1) => T3,
-  //    //    zero: T4,
-  //    //    a: GpiDstrBvec[GpiDstrBvec[T1]],
-  //    //    u: GpiDstrBvec[T2],
-  //    //    sparseValueT3Opt: Option[T3] = None,
-  //    //    sparseValueT4Opt: Option[T4] = None): GpiDstrBvec[T4] = {
-  //    //    dstr_map(dstr_innerp(f, c, g, zero, u, _: GpiDstrBvec[T1],
-  //    //      sparseValueT3Opt), a, sparseValueT4Opt)
-  //    //  }
-  //  }
   // Hadagard ".multiplication"
   private[lagraph] override def mHm[T: ClassTag](
                                                  // // TODO maybe sr OR maybe f: (T1, T2) => T3?

@@ -190,14 +190,12 @@ case class GpiDstrBvec[VS](val dstr: GpiDstr,
   override def toString(): String = {
     val ab = ArrayBuffer.fill(1, nrow.toInt)(sparseValue)
     val mr = vecRdd.collect
-    var p = 0
-    for (r <- 0 until mr.size) {
-      val ai = mr(p)
-      val ar = ai._1._1
-      val ac = ai._1._2
-      val av = ai._2
-      for (r <- 0 until av.u.size) {
-        ab(0)(ar * blocker.stride + r) = av.u(r)
+    vecRdd.collect.foreach {
+      case (k, v) => {
+        val vecstride = blocker.getVectorStrides(k._1)._2
+        for (r <- 0 until v.u.size) {
+          ab(0)(k._1 * blocker.stride + k._2 * vecstride + r) = v.u(r)
+        }
       }
     }
     val aab = ab.toArray

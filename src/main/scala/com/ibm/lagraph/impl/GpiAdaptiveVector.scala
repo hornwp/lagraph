@@ -179,6 +179,15 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
     val rv = GpiAdaptiveVector.asSparseBuffers(v)
     (rv._1 zip rv._2).toVector.toMap
   }
+  def concatenateToSparse[VS: ClassTag](vs: Seq[GpiAdaptiveVector[VS]]): GpiAdaptiveVector[VS] = {
+    def concat(sz: Int, i: Int, va: Seq[GpiAdaptiveVector[VS]], vf: Array[VS]): Array[VS] =
+      i match {
+        case `sz` => vf
+        case _ =>
+          concat(sz, i + 1, va, vf ++ GpiAdaptiveVector.asDenseBuffer(va(i)).toArray)
+      }
+    GpiAdaptiveVector.fromSeq(concat(vs.size, 0, vs, Array[VS]()), vs(0).sparseValue)
+  }
   def concatenateToDense[VS: ClassTag](vs: Seq[GpiAdaptiveVector[VS]]): GpiAdaptiveVector[VS] = {
     def concat(sz: Int, i: Int, va: Seq[GpiAdaptiveVector[VS]], vf: Array[VS]): Array[VS] =
       i match {

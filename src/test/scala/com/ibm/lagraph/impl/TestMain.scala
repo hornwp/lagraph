@@ -30,7 +30,7 @@ import org.apache.log4j.Level
 import org.apache.spark.SparkContext
 import com.ibm.lagraph._
 object TestMain {
-  def mult[A](
+  def mTm[A](
       a: Vector[Vector[A]],
       b: Vector[Vector[A]])(implicit n: Numeric[A]): Vector[Vector[A]] = {
     import n._
@@ -38,6 +38,13 @@ object TestMain {
       yield
         for (col <- b.transpose)
           yield row zip col map Function.tupled(_ * _) reduceLeft (_ + _)
+  }
+  def vToMrow[A](m: Vector[Vector[A]],
+                 mask: Vector[Boolean],
+                 v: Vector[A])(implicit n: Numeric[A]): Vector[Vector[A]] = {
+    import n._
+    for (row <- m zip mask)
+      yield if (row._2) v else row._1
   }
   def toArray[A: ClassTag](a: Vector[Vector[A]]): Array[Array[A]] = {
     a.map(x => x.toArray).toArray
@@ -478,8 +485,8 @@ object TestMain {
 
   }
 
-  //  test("LagDstrContext.vEquiv3") {
-  def LagDstrContext_vEquiv3(sc: SparkContext): Unit = {
+  //  test("LagDstrContext.vEquivV3") {
+  def LagDstrContext_vEquivV3(sc: SparkContext): Unit = {
     import scala.reflect.classTag
     def long2Str(l: Long): String = {
       if (l == LagSemigroup.infinity(classTag[Long])) " inf"
@@ -503,8 +510,8 @@ object TestMain {
     }
   }
   // ********
-  //  test("LagDstrContext.vZipWithIndex3") {
-  def LagDstrContext_vZipWithIndex3(sc: SparkContext): Unit = {
+  //  test("LagDstrContext.vZipWithIndexV3") {
+  def LagDstrContext_vZipWithIndexV3(sc: SparkContext): Unit = {
     val denseGraphSizes = (2 until 16).toList
     val nblocks = (1 until 24).toList
     val sparseValueInt = 0
@@ -525,8 +532,8 @@ object TestMain {
     }
   }
   // ********
-  //  test("LagDstrContext.vZipWithIndexSparse3") {
-  def LagDstrContext_vZipWithIndexSparse3(sc: SparkContext): Unit = {
+  //  test("LagDstrContext.vZipWithIndexSparseV3") {
+  def LagDstrContext_vZipWithIndexSparseV3(sc: SparkContext): Unit = {
     val denseGraphSizes = (2 until 16).toList
     val nblocks = (1 until 24).toList
     val sparseValueInt = 0
@@ -547,8 +554,8 @@ object TestMain {
     }
   }
   // ********
-  //  test("LagDstrContext.mZipWithIndexSparse3") {
-  def LagDstrContext_mZipWithIndexSparse3(sc: SparkContext): Unit = {
+  //  test("LagDstrContext.mZipWithIndexSparseV3") {
+  def LagDstrContext_mZipWithIndexSparseV3(sc: SparkContext): Unit = {
     val denseGraphSizes = (1 until 16).toList
     val nblocks = (1 until 7).toList
 
@@ -609,155 +616,204 @@ object TestMain {
       }
     }
   }
-    // ********
-//  test("LagDstrContext.mTm3NSQ") {
-  def LagDstrContext_mTm3NSQ(sc: SparkContext): Unit = {
+  // ********
+  // ********
+  // ********
+//  test("LagDstrContext.mTmV3") {
+  def LagDstrContext_mTmV3(sc: SparkContext): Unit = {
     val DEBUG = true
-    val add_mul = LagSemiring.plus_times[Double]
-    val denseGraphSizes = (1 until 16).toList
-    val nblocks = (1 until 12).toList
-    val sr = LagSemiring.plus_times[Double]
-    for (graphSizeRequested <- denseGraphSizes) {
-      for (nblock <- nblocks) {
-        for (colshift <- List(1, 2, 3,
-            graphSizeRequested - 2, graphSizeRequested - 2, graphSizeRequested)) {
-          for (negate <- List(true, false)) {
-            val nr = graphSizeRequested
-            val nc = if (negate) {graphSizeRequested - colshift}
-                else graphSizeRequested + colshift
-            if (nc > scala.math.min(nblock, nr) && nr > scala.math.min(nblock, nc)) {
-              if (DEBUG) println("LagDstrContext.mTm3NSQ", nr, nc, nblock)
+    val sr = LagSemiring.plus_times[Long]
+    val nblocks = List(1, 2, 3, 7, 8, 9)
+    val graphSizes = List(1, 2, 3, 10, 11, 12)
+    val sparseValue = 0L
+    for (nblock <- nblocks) {
+      for (l <- graphSizes) {
+        for (m <- graphSizes) {
+          for (n <- graphSizes) {
+            val mindim = List(nblock, l, m, n).min
+            if (l > mindim && m > mindim && n > mindim) {
+              if (DEBUG) println(
+                  "LagDstrContext.mTmV3: nblock: >%s<, l: >%s<, m: >%s<, n: >%s<".format(
+                  nblock, l, m, n))
+
+              // ref
+              val refA = Vector.tabulate(l, m)((r, c) => r * m + c + 1L)
+              val refB = Vector.tabulate(m, n)((r, c) => r * n + c + 101L)
+              val refC = mTm(refA, refB)
+//              if (DEBUG) {
+//                println("refA")
+//                println(refA)
+//                println("refB")
+//                println(refB)
+//                println("refC")
+//                println(refC)
+//              }
+
+              // lagraph
               val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
-              val nA = Vector.tabulate(nr, nc)((r, c) => r * nc + c + 1.0)
-              val nB = Vector.tabulate(nc, nr)((r, c) => r * nc + c + 101.0)
-              println(nA)
-              println(nB)
-              val sparseValue = 0.0
-              val mA =
-                hc.mFromMap((nr, nc),
-                    LagContext.mapFromSeqOfSeq(nA, sparseValue), sparseValue)
-              val mB =
-                hc.mFromMap((nc, nr),
-                    LagContext.mapFromSeqOfSeq(nB, sparseValue), sparseValue)
 
-              val mTmRes = hc.mTm(sr, mA, mB)
+              val lagA =
+                hc.mFromMap((l, m),
+                    LagContext.mapFromSeqOfSeq(refA, sparseValue), sparseValue)
+              val lagB =
+                hc.mFromMap((m, n),
+                    LagContext.mapFromSeqOfSeq(refB, sparseValue), sparseValue)
+//            if (DEBUG) {
+//              println("lagA")
+//              println(lagA)
+//              println("lagB")
+//              println(lagB)
+//            }
+              val lagC = hc.mTm(sr, lagA, lagB)
+//            if (DEBUG) {
+//              println("lagC")
+//              println(lagC)
+//            }
 
-              val resScala = mult(nA, nB)
-              //         println(mTmRes)
-              // //        println(toArray(resScala).deep.mkString("\n"))
+              // compare
               assert(
-                toArray(LagContext.vectorOfVectorFromMap((nr.toLong, nr.toLong),
-                                                         hc.mToMap(mTmRes)._1,
+                toArray(LagContext.vectorOfVectorFromMap((l.toLong, n.toLong),
+                                                         hc.mToMap(lagC)._1,
                                                          sparseValue)).deep == toArray(
-                  resScala).deep)
+                  refC).deep)
+
             }
           }
-        }
-      }
-    }
-  }
-
-    // ********
-//  test("LagDstrContext.mTm3NSQ2") {
-  def LagDstrContext_mTm3NSQ2(sc: SparkContext): Unit = {
-    val DEBUG = true
-    val add_mul = LagSemiring.plus_times[Double]
-    val nblocks = List(1) // (1 until 12).toList
-    val nrs = List(5) // (1 until 16).toList
-    val ncs = List(6) // (1 until 16).toList
-    val sr = LagSemiring.plus_times[Double]
-    for (nblock <- nblocks) {
-      for (nr <- nrs) {
-        for (nc <- ncs) {
-          if (DEBUG) println("LagDstrContext.mTm3NSQ2", nr, nc, nblock)
-          val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
-          val nA = Vector.tabulate(nr, nr)((r, c) => r * nc + c + 1.0)
-          val nB = Vector.tabulate(nr, nc)((r, c) => r * nc + c + 101.0)
-          println(nA)
-          println(nB)
-          val sparseValue = 0.0
-          val mA =
-            hc.mFromMap((nr, nr),
-                LagContext.mapFromSeqOfSeq(nA, sparseValue), sparseValue)
-          val mB =
-            hc.mFromMap((nr, nc),
-                LagContext.mapFromSeqOfSeq(nB, sparseValue), sparseValue)
-
-          val mTmRes = hc.mTm(sr, mA, mB)
-
-          val resScala = mult(nA, nB)
-          //         println(mTmRes)
-          // //        println(toArray(resScala).deep.mkString("\n"))
-          assert(
-            toArray(LagContext.vectorOfVectorFromMap((nr.toLong, nc.toLong),
-                                                     hc.mToMap(mTmRes)._1,
-                                                     sparseValue)).deep == toArray(
-              resScala).deep)
         }
       }
     }
   }
 
   // ********
-//  test("LagDstrContext.mTv3NSQ") {
-  def LagDstrContext_mTv3NSQ(sc: SparkContext): Unit = {
+//  test("LagDstrContext.mTvV3") {
+  def LagDstrContext_mTvV3(sc: SparkContext): Unit = {
     val DEBUG = true
-    val add_mul = LagSemiring.plus_times[Double]
-    val denseGraphSizes = (1 until 16).toList
-    val nblocks = (1 until 12).toList
-    for (graphSizeRequested <- denseGraphSizes) {
-      for (nblock <- nblocks) {
-        for (colshift <- List(1, 2, 3,
-            graphSizeRequested - 2, graphSizeRequested - 2, graphSizeRequested)) {
-          for (negate <- List(true, false)) {
-            val nr = graphSizeRequested
-            val nc = if (negate) {graphSizeRequested - colshift}
-                else graphSizeRequested + colshift
-            if (nc > scala.math.min(nblock, nr) && nr > scala.math.min(nblock, nc)) {
-              if (DEBUG) println("LagDstrContext.mTv3NSQ", nr, nc, nblock)
-              val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
-              // vector
-              val sparseValue = 0.0
-              val vMap = Map((0 until nc).map { r =>
-                (r.toLong, r.toDouble)
-              }: _*)
-              val v = hc.vFromMap[Double](nc, vMap, sparseValue)
+    val sr = LagSemiring.plus_times[Long]
+    val nblocks = List(1, 2, 3, 7, 8, 9)
+    val graphSizes = List(1, 2, 3, 10, 11, 12)
+    val sparseValue = 0L
+    for (nblock <- nblocks) {
+      for (l <- graphSizes) {
+        for (m <- graphSizes) {
+          val mindim = List(nblock, l, m).min
+          if (l > mindim && m > mindim) {
+            if (DEBUG) println("LagDstrContext.mTvV3: nblock: >%s<, l: >%s<, m: >%s<".format(
+                nblock, l, m))
 
-              // matrix
-              val mMap = Map((0 until nr).map { r =>
-                (0 until nc).map { c =>
-                  ((r.toLong, c.toLong), (r * nc + c).toDouble)
-                }
-              }.flatten: _*)
-              val m = hc.mFromMap[Double]((nr, nc), mMap, sparseValue)
+            val refA = Vector.tabulate(l, m)((r, c) => r * m + c + 1L)
+            val refv = Vector.tabulate(m, 1)((r, c) => r + 101L)
+            val refu = mTm(refA, refv)
 
-              // multiply
-              val u = hc.mTv(add_mul, m, v)
+//            if (DEBUG) {
+//              println("refA")
+//              println(refA)
+//              println("refv")
+//              println(refv)
+//              println("refu")
+//              println(refu)
+//            }
 
-              // back to map
-              val (uvm, uvmSparseValue) = hc.vToMap(u)
-              assert(uvmSparseValue == sparseValue)
+            // lagraph
+            val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
+            val lagA =
+              hc.mFromMap((l, m),
+                  LagContext.mapFromSeqOfSeq(refA, sparseValue), sparseValue)
+            val lagv = hc.vFromSeq(refv.flatten, sparseValue)
+//            if (DEBUG) {
+//              println("lagA")
+//              println(lagA)
+//              println("lagv")
+//              println(lagv)
+//            }
+            val lagu = hc.mTv(sr, lagA, lagv)
+//            if (DEBUG) {
+//              println("lagu")
+//              println(lagu)
+//            }
 
-              // compare
-              val uvma = LagContext.vectorFromMap(nr, uvm, sparseValue)
-
-              val mva = Vector.tabulate(nr, nc)((r, c) => (r * nc + c).toDouble)
-              val vva = Vector.tabulate(nc, 1)((r, c) => r.toDouble)
-              val mua = mult(mva, vva)
-              val muat = mua.transpose
-              val ua = muat(0)
-              assert(ua.corresponds(uvma)(_ == _))
-            }
+              assert(refu.flatten.corresponds( hc.vToVector(lagu))(_ == _))
           }
         }
       }
     }
   }
 
+  // ********
+//  test("LagDstrContext.vToMrowV3") {
+  def LagDstrContext_vToMrowV3(sc: SparkContext): Unit = {
+    val DEBUG = true
+    val nblocks = List(1, 2, 3, 7, 8, 9)
+    val graphSizes = List(1, 2, 3, 10, 11, 12)
+    for (nblock <- nblocks) {
+      for (l <- graphSizes) {
+        for (m <- graphSizes) {
+          val mindim = List(nblock, l, m).min
+          if (l > mindim && m > mindim) {
+            if (DEBUG) println("LagDstrContext.vToMrowV3: nblock: >%s<, l: >%s<, m: >%s<".format(
+                nblock, l, m))
+
+            // ref
+            val refA = Vector.tabulate(l, m)((r, c) => r * m + c + 1.0)
+            val maskRows = Vector(l/2, l/2 - 1, l/2 + 1)
+            val refMask = Vector.tabulate(l)(
+                r => if (maskRows.contains(r)) true else false)
+            val refv = Vector.tabulate(m)(r => r + 101.0)
+            val refB = vToMrow(refA, refMask, refv)
+
+//            if (DEBUG) {
+//              println("refA")
+//              println(refA)
+//              println("refMask")
+//              println(refMask)
+//              println("refv")
+//              println(refv)
+//              println("refB")
+//              println(refB)
+//            }
+
+            // lagraph
+            val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
+            val sparseValue = 0.0
+
+            val lagA =
+              hc.mFromMap((l, m),
+                  LagContext.mapFromSeqOfSeq(refA, sparseValue), sparseValue)
+            val lagMask =
+              hc.vFromSeq(refMask, false)
+            val lagV =
+              hc.vFromSeq(refv, sparseValue)
+            val lagB = hc.vToMrow(lagA, lagMask, lagV)
+//            if (DEBUG) {
+//              println("lagA")
+//              println(lagA)
+//              println("lagMask")
+//              println(lagMask)
+//              println("lagV")
+//              println(lagV)
+//              println("lagB")
+//              println(lagB)
+//            }
+
+            assert(
+              toArray(LagContext.vectorOfVectorFromMap((l.toLong, m.toLong),
+                                                       hc.mToMap(lagB)._1,
+                                                       sparseValue)).deep == toArray(
+                refB).deep)
+
+          }
+        }
+      }
+    }
+  }
+
+
+
+  // ********
+  // ********
   // ********
 //  test("LagDstrContext.wolf2015task") {
   def LagDstrContext_wolf2015task(sc: SparkContext): Unit = {
-
+    val DEBUG = true
     // ********
     // Graph from Worked Example in wolf2015task
 
@@ -879,79 +935,225 @@ object TestMain {
     val Ctri = hc.mTm(WolfSemiring, Aadj, Binc)
     println("Ctri: >\n%s<".format(hc.mToString(Ctri, wolfType2Str)))
 
-//    A.collect
-//      .foreach {kv => println("k: (%s,%s), v: (%s,%s)"
-//      .format(kv._1._1, kv._1._2, kv._2._1, kv._2._2))}
-//      .foreach {
-//        case (x) => println("c: (%s,%s)".format(x._1, x._2))
-//      }
-//      .foreach {
-//        case (k, v) => println("c_i: (%s, (%s,%s))".format(k, v._1, v._2))
-//      }
+    def collapse(a: WolfSemiringType): (Long) = {
+      if (a._1 < 0) 1L else 0L
+    }
+    if (DEBUG) {
+      val CtriCount = Ctri.map(collapse)
+      println("CtriCount: >\n%s<".format(hc.mToString(CtriCount, long2Str)))
+    }
+    val sr = LagSemiring.plus_times[Long]
+    val count = hc.mTv(
+        sr,
+        Ctri.map(collapse),
+        hc.vReplicate(nume, 1L, Option(0L))).
+        reduce(sr.addition, sr.addition, 0L) / 3L
 
-//    B.collect
-//      .foreach {
-//        case (k, v) => println("k: (%s,%s), v: (%s,%s,%s))".format(
-//            k._1, k._2, v._1, v._2, v._3))
-//      }
-//    B.collect
-//      .foreach {
-//        case (x) => println("c: (%s,%s)".format(x._1, x._2))
-//      }
+    println("Triangle count: >%s<".format(count))
 
-//    // Undirected
-//    val rcvGraph = sc
-//      .parallelize(houseEdges)
-//      .flatMap { x =>
-//        List(((x._1._1, x._1._2), x._2), ((x._1._2, x._1._1), x._2))
-//      }
-//      .distinct()
+  }
+  // ********
+//  test("LagDstrContext.truss") {
+  def LagDstrContext_truss(sc: SparkContext): Unit = {
+    val DEBUG = true
+    // ********
+    // Graph from samsi2018static
+
+    // some handy constants
+    val LongInf = LagSemigroup.infinity(classTag[Long])
+    val LongMinf = LagSemigroup.minfinity(classTag[Long])
+    val LongOne = 1L
+    val LongZero = 0L
+
+    // for verbose printing
+    def long2Str(l: Long): String = {
+      if (l == LongInf) " inf"
+      else if (l == LongInf - 1L) "inf1"
+      else "%4d".format(l)
+    }
+
+    def trussType2Str(d: (Long, Long, Long)): String = {
+      val d1 = long2Str(d._1)
+      val d2 = long2Str(d._2)
+      val d3 = long2Str(d._3)
+      "(%s,%s,%s)".format(d1, d2, d3)
+    }
+
+//    // ********
+//    // Wolf's: wolf2015task Semiring: Initialization
 //
-//    // obtain a distributed context for Spark environment
-//    val nblock = 1 // set parallelism (blocks on one axis)
-//    val hc = LagContext.getLagDstrContext(sc, numv, nblock)
+//    type WolfSemiringType = Tuple3[Long, Long, Long]
 //
-//    // use distributed context-specific utility to convert from RDD to
-//    // adjacency LagMatrix
-//    val mAdjIn = hc.mFromRcvRdd(rcvGraph, 0.0F)
-//    czczczc
-//    println("mAdjIn: >\n%s<".format(hc.mToString(mAdjIn, float2Str)))
-//
-//    val add_mul = LagSemiring.plus_times[Double]
-//    val denseGraphSizes = (1 until 16).toList
-//    val nblocks = (1 until 12).toList
-//    val sr = LagSemiring.plus_times[Double]
-//    for (graphSize <- denseGraphSizes) {
-//      for (nblock <- nblocks) {
-//        println("LagDstrContext.mTm", graphSize, nblock)
-//        val hc: LagContext = LagContext.getLagDstrContext(sc, graphSize, nblock)
-//
-//        val nv = graphSize
-//
-//        val nr = nv
-//        val nc = nv
-//        val nA = Vector.tabulate(nv, nv)((r, c) => r * nv + c + 1.0)
-//        val nB = Vector.tabulate(nv, nv)((r, c) => r * nv + c + 101.0)
-//        val sparseValue = 0.0
-//        val mA =
-//          hc.mFromMap(LagContext.mapFromSeqOfSeq(nA, sparseValue), sparseValue)
-//        val mB =
-//          hc.mFromMap(LagContext.mapFromSeqOfSeq(nB, sparseValue), sparseValue)
-//
-//        val mTmRes = hc.mTm(sr, mA, mB)
-//
-//        val resScala = mult(nA, nB)
-//        //         println(mA)
-//        //         println(mB)
-//        //         println(mTmRes)
-//        // //        println(toArray(resScala).deep.mkString("\n"))
-//        assert(
-//          toArray(LagContext.vectorOfVectorFromMap(hc.mToMap(mTmRes)._1,
-//                                                   sparseValue,
-//                                                   (nv.toLong, nv.toLong))).deep == toArray(
-//            resScala).deep)
+//    // Ordering for PrimSemiringType
+//    trait WolfSemiringTypeOrdering extends Ordering[WolfSemiringType] {
+//      def compare(u: WolfSemiringType, v: WolfSemiringType): Int = {
+//        if (u._1 < v._1) -1
+//        else if (u._1 > v._1) 1
+//        else if (u._2 < v._2) -1
+//        else if (u._2 > v._2) 1
+//        else if (u._3 < v._3) -1
+//        else if (u._3 > v._3) 1
+//        else 0
 //      }
 //    }
+//
+//    // Numeric for WolfSemiringType
+//    trait WolfSemiringTypeAsNumeric
+//        extends com.ibm.lagraph.LagSemiringAsNumeric[WolfSemiringType]
+//        with WolfSemiringTypeOrdering {
+//      def plus(u: WolfSemiringType, v: WolfSemiringType): WolfSemiringType = {
+//        if ( u == fromInt(0) ) v
+//        else if ( v == fromInt(0) ) u
+//        else if ( (u._1 == v._1) && (u._2 == v._3) && (u._3 == v._2)) (-u._1, -u._2, -u._3)
+//        else fromInt(0)
+//      }
+//      def times(x: WolfSemiringType, y: WolfSemiringType): WolfSemiringType = {
+//        if ((x == fromInt(0)) || (y == fromInt(0))) fromInt(0)
+//        else if (x == fromInt(1)) y
+//        else if (y == fromInt(1)) x
+//        else (y._1, y._2, x._3)
+//      }
+//      def fromInt(x: Int): WolfSemiringType = x match {
+//        case 0 => (LongInf, LongInf, LongInf)
+//        case 1 => (LongInf-1L, LongInf-1L, LongInf-1L)
+//        case other =>
+//          throw new RuntimeException(
+//            "WolfSemiring: fromInt for: >%d< not implemented".format(other))
+//      }
+//    }
+//
+//    implicit object WolfSemiringTypeAsNumeric extends WolfSemiringTypeAsNumeric
+//    val WolfSemiring =
+//      LagSemiring.plus_times[WolfSemiringType]
+
+    // obtain a distributed context for Spark environment
+    val nblock = 1 // set parallelism (blocks on one axis)
+    val hc = LagContext.getLagDstrContext(sc, nblock)
+//  (12,3)
+//      |1  1  1| (0L, 0L),
+//      |3  1  1| (2L, 0L),
+//      |5  1  1| (4L, 0L),
+//      |1  2  1| (0L, 1L),
+//      |2  2  1| (1L, 1L),
+//      |6  2  1| (5L, 1L),
+//      |2  3  1| (1L, 2L),
+//      |4  3  1| (3L, 2L),
+//      |5  3  1| (4L, 2L),
+//      |3  4  1| (2L, 3L),
+//      |4  4  1| (3L, 3L),
+//      |6  5  1| (5L, 4L),
+    // ****
+    // truss
+    val k = 3
+    println("computing k-truss for k: >%s<".format(k))
+    // initialize graph edges
+    val numv = 6L
+    val exampleEdges = List((0L, 0L),
+                            (2L, 0L),
+                            (4L, 0L),
+                            (0L, 1L),
+                            (1L, 1L),
+                            (5L, 1L),
+                            (1L, 2L),
+                            (3L, 2L),
+                            (4L, 2L),
+                            (2L, 3L),
+                            (3L, 3L),
+                            (5L, 4L))
+    val Ein = sc.parallelize(exampleEdges)
+
+    // ****
+    // define adjacency matrix
+    val A = Ein
+      .flatMap{e => List(
+          ((e._1, e._2), LongOne),
+          ((e._2, e._1), LongOne)) }
+
+    // use distributed context-specific utility to convert from RDD to
+    // adjacency LagMatrix
+    val Aadj = hc.mFromRcvRdd((numv, numv), A, LongZero) // WolfSemiring.zero)
+    println("Aadj: >\n%s<".format(hc.mToString(Aadj, long2Str)))
+
+    // define incidence matrix
+    val E = Ein
+      .map{e => ((e._1, e._2), LongOne)}
+
+
+    val nume = E.max()(
+        new Ordering[Tuple2[Tuple2[Long, Long], Long]]() {
+      override def compare(
+          x: ((Long, Long), (Long)),
+          y: ((Long, Long), (Long))): Int =
+          Ordering[Long].compare(x._1._2, y._1._2)
+    })._1._2 + 1L
+    println("nume: >%s<".format(nume))
+
+    // use distributed context-specific utility to convert from RDD to
+    // adjacency LagMatrix
+    val Einc = hc.mFromRcvRdd((numv, nume), E, LongZero)
+    println("Einc: >\n%s<".format(hc.mToString(Einc, long2Str)))
+
+    val sr = LagSemiring.plus_times[Long]
+
+    val d = hc.mTv(
+        sr,
+        Einc,
+        hc.vReplicate(nume, 1L, Option(0L)))
+    println("d: >\n%s<".format(hc.vToString(d, long2Str)))
+
+    val tmp = hc.mTm(sr, Einc.transpose, Einc)
+    println("tmp: >\n%s<".format(hc.mToString(tmp, long2Str)))
+
+    def diag(v: Long, k: (Long, Long)): Long =
+      if (k._1 == k._2) 0L else v
+    val tmpd = tmp.zipWithIndex(diag)
+    println("tmpd: >\n%s<".format(hc.mToString(tmpd, long2Str)))
+
+    val R = hc.mTm(sr, Einc, tmpd)
+    println("R: >\n%s<".format(hc.mToString(R, long2Str)))
+
+    def r2(e: Long): Long = {
+      if (e == 2) 1L else 0L
+    }
+
+    val R2 = R.map(r2)
+    println("R2: >\n%s<".format(hc.mToString(R2, long2Str)))
+
+    val s = hc.mTv(
+        sr,
+        R2,
+        hc.vReplicate(nume, 1L, Option(0L)))
+    println("s: >\n%s<".format(hc.vToString(s, long2Str)))
+
+    def gekm2(s: LagVector[Long]): LagVector[Long] = {
+      // xc = s >= k-2;
+      def f(x: Long) = if (x >= k - 2) 1L else 0L
+      s.map(f)
+    }
+
+    def nnz(s: LagVector[Long]): Long = {
+      // xc = s >= k-2;
+      s.reduce(sr.addition, sr.addition, 0L)
+    }
+
+    def any(a: Long, b: Long): Long = {
+      val aa = if (a > 1L) 1L else 0L
+      val bb = if (b > 1L) 1L else 0L
+      aa + bb
+    }
+
+    def recurse(xc: LagVector[Long], E: LagMatrix[Long]): LagMatrix[Long] =
+      if (nnz(xc) == E.transpose.tV(sr,
+          hc.vReplicate(nume, 1L, Option(0L))).reduce(any, any, 0L)){ E } else {
+        val Enext = E.transpose.tV(sr, xc)
+        throw new NotImplementedError("vToMrow: TBD")
+      }
+//    val count = hc.mTv(
+//        sr,
+//        s,
+//        hc.vReplicate(nume, 1L, Option(0L))).
+//        reduce(sr.addition, sr.addition, 0L)
+
   }
 
   def isolate(sc: SparkContext): Unit = {
@@ -974,9 +1176,6 @@ object TestMain {
     println("master: >%s<".format(master))
     val sc = new SparkContext(master, "TestMain")
     //    TestMain.testit(sc)
-    //    TestMain.LagDstrContext_mTv(sc)
-    //    TestMain.LagDstrContext_mTv3(sc)
-    //    TestMain.LagDstrContext_mTm3(sc)
     //    TestMain.LagDstrContext_vFromMap_Dense(sc)
     //    TestMain.LagDstrContext_vIndices(sc)
     //    TestMain.LagDstrContext_vIndices2(sc)
@@ -990,10 +1189,11 @@ object TestMain {
     //    TestMain.LagDstrContext_vZipWithIndex3(sc)
     //    TestMain.LagDstrContext_vZipWithIndexSparse3(sc)
     //    TestMain.LagDstrContext_mZipWithIndexSparse3(sc)
-    //    TestMain.LagDstrContext_mTm3NSQ(sc)
-//        TestMain.LagDstrContext_mTm3NSQ2(sc)
-    //    TestMain.LagDstrContext_mTv3NSQ(sc)
-    TestMain.LagDstrContext_wolf2015task(sc)
+    TestMain.LagDstrContext_mTmV3(sc)
+    TestMain.LagDstrContext_mTvV3(sc)
+    TestMain.LagDstrContext_vToMrowV3(sc)
+//    TestMain.LagDstrContext_wolf2015task(sc)
+//    TestMain.LagDstrContext_truss(sc)
   }
 }
 // scalastyle:on println

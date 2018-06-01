@@ -541,7 +541,7 @@ abstract class LagMatrix[T: ClassTag] protected (val hc: LagContext, val size: (
   // matrix function
   // *****
   // experimental
-  def map[T2: ClassTag](f: (T) => T2, m: LagMatrix[T]): LagMatrix[T2] =
+  def map[T2: ClassTag](f: (T) => T2): LagMatrix[T2] =
     hc.mMap(f, this)
   // experimental
   def zip[T2: ClassTag, T3: ClassTag](f: (T, T2) => T3,
@@ -663,6 +663,20 @@ abstract class LagMatrix[T: ClassTag] protected (val hc: LagContext, val size: (
     */
   def vFromRow(mRow: Long): LagVector[T] =
     hc.vFromMrow(this, mRow)
+
+  /**
+    * Using a mask vector(nrow), replace rows in this matrix with a specified vector(ncol).
+    *
+    *  @tparam T the element type of the input matrix
+    *
+    *  @param maskV the mask vector
+    *  @param u the row replacement
+    *
+    *  @return the resultant matrix
+    */
+  def vToRow(
+      maskV: LagVector[Boolean], u: LagVector[T]): LagMatrix[T] =
+    hc.vToMrow(this, maskV, u)
 
   /**
     * Return a vector representing a column in this matrix.
@@ -1038,6 +1052,20 @@ trait LagContext {
     *  @return a new vector representing mth row of m
     */
   private[lagraph] def vFromMrow[T: ClassTag](m: LagMatrix[T], mRow: Long): LagVector[T]
+
+  /**
+    * Using a mask vector(nrow), replace rows in matrix with a specified vector(ncol).
+    *
+    *  @tparam T the element type of the input matrix
+    *
+    *  @param m the input matrix
+    *  @param maskV the mask vector
+    *  @param u the row replacement
+    *
+    *  @return the resultant matrix
+    */
+  private[lagraph] def vToMrow[T: ClassTag](
+      m: LagMatrix[T], maskV: LagVector[Boolean], u: LagVector[T]): LagMatrix[T]
 
   /**
     * Create a vector from a matrix column.

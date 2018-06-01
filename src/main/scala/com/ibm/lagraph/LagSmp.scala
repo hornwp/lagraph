@@ -131,6 +131,11 @@ final case class LagSmpContext() extends LagContext {
       }
     }.flatten: _*), x)
   }
+  // experimental
+  override def vToMrow[T: ClassTag](
+      m: LagMatrix[T], maskV: LagVector[Boolean], u: LagVector[T]): LagMatrix[T] = {
+    throw new NotImplementedError("vToMrow: TBD")
+  }
 
   // *****
   // vector function
