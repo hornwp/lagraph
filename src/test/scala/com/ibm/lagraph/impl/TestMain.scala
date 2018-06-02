@@ -806,6 +806,58 @@ object TestMain {
     }
   }
 
+  // ********
+//  test("LagDstrContext.transposeV3") {
+  def LagDstrContext_transposeV3(sc: SparkContext): Unit = {
+    val DEBUG = true
+    val nblocks = List(1, 2, 3, 7, 8, 9)
+    val graphSizes = List(1, 2, 3, 10, 11, 12)
+    for (nblock <- nblocks) {
+      for (l <- graphSizes) {
+        for (m <- graphSizes) {
+          val mindim = List(nblock).min
+          if (l > mindim && m > mindim) {
+            if (DEBUG) println("LagDstrContext.transposeV3: nblock: >%s<, l: >%s<, m: >%s<".format(
+                nblock, l, m))
+
+            // ref
+            val refA = Vector.tabulate(l, m)((r, c) => r * m + c + 1.0)
+            val refB = refA.transpose
+//            if (DEBUG) {
+//              println("refA")
+//              println(refA)
+//              println("refB")
+//              println(refB)
+//            }
+
+            // lagraph
+            val hc: LagContext = LagContext.getLagDstrContext(sc, nblock)
+            val sparseValue = 0.0
+
+            val lagA =
+              hc.mFromMap((l, m),
+                  LagContext.mapFromSeqOfSeq(refA, sparseValue), sparseValue)
+
+            val lagB = lagA.transpose
+//            if (DEBUG) {
+//              println("lagA")
+//              println(lagA)
+//              println("lagB")
+//              println(lagB)
+//            }
+
+            assert(
+              toArray(LagContext.vectorOfVectorFromMap((m.toLong, l.toLong),
+                                                       hc.mToMap(lagB)._1,
+                                                       sparseValue)).deep == toArray(
+                refB).deep)
+
+          }
+        }
+      }
+    }
+  }
+
 
 
   // ********
@@ -1198,8 +1250,9 @@ object TestMain {
 //    TestMain.LagDstrContext_mTmV3(sc)
 //    TestMain.LagDstrContext_mTvV3(sc)
 //    TestMain.LagDstrContext_vToMrowV3(sc)
+    TestMain.LagDstrContext_transposeV3(sc)
 //    TestMain.LagDstrContext_wolf2015task(sc)
-    TestMain.LagDstrContext_truss(sc)
+//    TestMain.LagDstrContext_truss(sc)
   }
 }
 // scalastyle:on println

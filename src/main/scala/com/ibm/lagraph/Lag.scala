@@ -1039,6 +1039,7 @@ trait LagContext {
     *
     *  @return a new matrix representing the transpose
     */
+  @deprecated("Not in scope", "0.1.0")
   private[lagraph] def mTranspose[T: ClassTag](m: LagMatrix[T]): LagMatrix[T]
 
   /**

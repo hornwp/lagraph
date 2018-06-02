@@ -984,6 +984,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
 
   // *******
   // matrix mechanics
+  @deprecated("Not in scope", "0.1.0")
   private[lagraph] override def mTranspose[T: ClassTag](m: LagMatrix[T]): LagMatrix[T] = m match {
     case ma: LagDstrMatrix[T] => {
       def perblock(iter: Iterator[((Int, Int), GpiBmat[T])]): Iterator[((Int, Int), GpiBmat[T])] = {

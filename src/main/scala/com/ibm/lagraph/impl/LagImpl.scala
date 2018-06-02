@@ -36,11 +36,42 @@ final case class LagDstrMatrix[T: ClassTag](override val hc: LagContext,
   //  override def size = (dstrBmat.nrow, dstrBmat.ncol)
   override lazy val _transpose: LagMatrix[T] = hc match {
     case hca: LagDstrContext => {
-      hca.mFromRcvRdd((dstrBmat.ncol,
-                      dstrBmat.nrow),
-                      rcvRdd.map { case (k, v) => ((k._2, k._1), v) },
-                      dstrBmat.sparseValue)
-    } // this.hc.mTranspose(this)
+      def perblock(iter: Iterator[((Int, Int), GpiBmat[T])]): Iterator[((Int, Int), GpiBmat[T])] = {
+        require(iter.hasNext)
+        val rcb = iter.next()
+        require(!iter.hasNext)
+        val bmata = rcb._2 // bmat for this block
+        //        val bmata = bmat
+        //        bmat match {
+        //          case bmata: GpiBmatAdaptive[T] => {
+        val at = GpiSparseRowMatrix.transpose(bmata.a)
+        if (rcb._1._1 == rcb._1._2) {
+          List(Tuple2(Tuple2(rcb._1._1, rcb._1._2), GpiBmat(at))).toIterator
+        }
+        else {
+          List(Tuple2(Tuple2(rcb._1._2, rcb._1._1), GpiBmat(at))).toIterator
+        }
+        //          }
+        //        }
+      }
+      val ma = this
+      val newMmap = ma.rcvRdd.map { case (k, v) => ((k._2, k._1), v) }
+      val matRdd = ma.dstrBmat.matRdd
+        .mapPartitions(perblock, preservesPartitioning = false)
+      val blocker = GpiDstrMatrixBlocker((ma.size._2, ma.size._1), ma.dstrBmat.dstr.nblockRequested)
+      LagDstrMatrix(this.hc,
+                    newMmap,
+                    GpiDstrBmat(ma.dstrBmat.dstr,
+                                blocker,
+                                matRdd,
+                                ma.dstrBmat.ncol,
+                                ma.dstrBmat.nrow,
+                                ma.dstrBmat.sparseValue))
+//      hca.mFromRcvRdd((dstrBmat.ncol,
+//                      dstrBmat.nrow),
+//                      rcvRdd.map { case (k, v) => ((k._2, k._1), v) },
+//                      dstrBmat.sparseValue)
+    }
   }
 }
 // ********

@@ -330,6 +330,7 @@ final case class LagSmpContext() extends LagContext {
   //      LagSmpMatrix(this, GpiSparseRowMatrix.transpose(ma.vov))
   //    }
   //  }
+  @deprecated("Not in scope", "0.1.0")
   private[lagraph] override def mTranspose[T: ClassTag](m: LagMatrix[T]): LagMatrix[T] = m match {
     case ma: LagSmpMatrix[_] => {
       val sparseValue = ma.vov(0).sparseValue
