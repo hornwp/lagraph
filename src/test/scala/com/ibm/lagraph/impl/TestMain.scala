@@ -1006,10 +1006,10 @@ object TestMain {
   }
   // ********
 //  test("LagDstrContext.truss") {
-  def LagDstrContext_truss(sc: SparkContext): Unit = {
+  def LagDstrContext_samsi2017static_algo4_truss(sc: SparkContext): Unit = {
     val DEBUG = true
     // ********
-    // Graph from samsi2018static
+    // Graph from samsi2017static
 
     // some handy constants
     val LongInf = LagSemigroup.infinity(classTag[Long])
@@ -1147,7 +1147,7 @@ object TestMain {
     })._1._2 + 1L
     println("nume: >%s<".format(nume))
 
-    // some handy constant
+    // some handy constants
     val e0 = hc.vReplicate(nume, 0L, Option(0L))
     val e1 = hc.vReplicate(nume, 1L, Option(0L))
 
@@ -1234,6 +1234,205 @@ object TestMain {
     val Efinal = recurse(xc, E)
     println("Efinal: >\n%s<".format(hc.mToString(Efinal, long2Str)))
   }
+    // ********
+//  test("LagDstrContext.samsi2017static_algo1_tricnt") {
+  def LagDstrContext_samsi2017static_algo1_tricnt(sc: SparkContext): Unit = {
+    val DEBUG = true
+    // ********
+    // Graph from Worked Example in wolf2015task
+
+    // some handy constants
+    val LongOne = 1L
+    val LongZero = 0L
+    val LongInf = LagSemigroup.infinity(classTag[Long])
+    val LongMinf = LagSemigroup.minfinity(classTag[Long])
+
+    // for verbose printing
+    def long2Str(l: Long): String = {
+      if (l == LongInf) " inf"
+      else if (l == LongInf - 1L) "inf1"
+      else "%4d".format(l)
+    }
+
+    // ********
+    // Algo1 Semiring
+
+    val sr = LagSemiring.plus_times[Long]
+
+    // obtain a distributed context for Spark environment
+    val nblock = 1 // set parallelism (blocks on one axis)
+    val hc = LagContext.getLagDstrContext(sc, nblock)
+
+    // ****
+    // initialize graph edges
+    val numv = 5L
+    val exampleEdges = List((0L, 4L),
+                            (1L, 4L),
+                            (2L, 4L),
+                            (3L, 1L),
+                            (3L, 2L),
+                            (4L, 3L))
+    val E = sc.parallelize(exampleEdges)
+
+    // ****
+    // define adjacency matrix
+    val A = E
+      .flatMap{e => List(
+          ((e._1, e._2), LongOne),
+          ((e._2, e._1), LongOne)) }
+
+    // use distributed context-specific utility to convert from RDD to
+    // adjacency LagMatrix
+    val Aadj = hc.mFromRcvRdd((numv, numv), A, 0L)
+    println("Aadj: >\n%s<".format(hc.mToString(Aadj, long2Str)))
+
+    // define incidence matrix
+    val B = E
+      .map{e => if (e._1 < e._2) (e._1, e._2) else (e._2, e._1)}
+      .zipWithIndex()
+      .flatMap{ei => List(
+          ((ei._1._1, ei._2), 1L),
+          ((ei._1._2, ei._2), 1L))}
+
+
+    val nume = B.max()(
+        new Ordering[Tuple2[Tuple2[Long, Long], Long]]() {
+      override def compare(
+          x: ((Long, Long), Long),
+          y: ((Long, Long), Long)): Int =
+          Ordering[Long].compare(x._1._2, y._1._2)
+    })._1._2 + 1L
+    println("nume: >%s<".format(nume))
+
+    // some handy constants
+    val e0 = hc.vReplicate(nume, 0L, Option(0L))
+    val e1 = hc.vReplicate(nume, 1L, Option(0L))
+
+    // use distributed context-specific utility to convert from RDD to
+    // adjacency LagMatrix
+    val Binc = hc.mFromRcvRdd((numv, nume), B, 0L)
+    println("Binc: >\n%s<".format(hc.mToString(Binc, long2Str)))
+
+    // C = A*B;
+    val Ctri = hc.mTm(sr, Aadj, Binc)
+    println("Ctri: >\n%s<".format(hc.mToString(Ctri, long2Str)))
+
+    // functor for "nnz( C==2 )"
+    def ceq2(a: Long): (Long) = {
+      if (a == 2L) 1L else 0L
+    }
+    // numTriangles = nnz( C==2 ) / 3;
+    val count = Ctri.map(ceq2).tV(sr, e1).reduce(sr.addition, sr.addition, 0L) / 3L
+
+    if (DEBUG) {
+      println("Ctri.map(ceq2): >\n%s<".format(hc.mToString(Ctri.map(ceq2), long2Str)))
+    }
+
+    println("Triangle count: >%s<".format(count))
+
+  }
+    // ********
+//  test("LagDstrContext.samsi2017static_algo2_tricnt") {
+  def LagDstrContext_samsi2017static_algo2_tricnt(sc: SparkContext): Unit = {
+    val DEBUG = true
+    // ********
+    // Graph from Worked Example in wolf2015task
+
+    // some handy constants
+    val LongOne = 1L
+    val LongZero = 0L
+    val LongInf = LagSemigroup.infinity(classTag[Long])
+    val LongMinf = LagSemigroup.minfinity(classTag[Long])
+
+    // for verbose printing
+    def long2Str(l: Long): String = {
+      if (l == LongInf) " inf"
+      else if (l == LongInf - 1L) "inf1"
+      else "%4d".format(l)
+    }
+
+    // ********
+    // Algo2 Semiring
+
+    val sr = LagSemiring.plus_times[Long]
+
+    // obtain a distributed context for Spark environment
+    val nblock = 1 // set parallelism (blocks on one axis)
+    val hc = LagContext.getLagDstrContext(sc, nblock)
+
+    // ****
+    // initialize graph edges
+    val numv = 5L
+    val exampleEdges = List((0L, 4L),
+                            (1L, 4L),
+                            (2L, 4L),
+                            (3L, 1L),
+                            (3L, 2L),
+                            (4L, 3L))
+    val E = sc.parallelize(exampleEdges)
+
+    // ****
+    // define adjacency matrix
+    val A = E
+      .flatMap{e => List(
+          ((e._1, e._2), LongOne),
+          ((e._2, e._1), LongOne)) }
+
+    // use distributed context-specific utility to convert from RDD to
+    // adjacency LagMatrix
+    val Aadj = hc.mFromRcvRdd((numv, numv), A, 0L)
+    println("Aadj: >\n%s<".format(hc.mToString(Aadj, long2Str)))
+
+//    val vZero = hc.vReplicate(numv, 0L, Option(0L))
+    val vOne = hc.vReplicate(numv, 1L, Option(0L))
+
+//    // define incidence matrix
+//    val B = E
+//      .map{e => if (e._1 < e._2) (e._1, e._2) else (e._2, e._1)}
+//      .zipWithIndex()
+//      .flatMap{ei => List(
+//          ((ei._1._1, ei._2), 1L),
+//          ((ei._1._2, ei._2), 1L))}
+//
+//
+//    val nume = B.max()(
+//        new Ordering[Tuple2[Tuple2[Long, Long], Long]]() {
+//      override def compare(
+//          x: ((Long, Long), Long),
+//          y: ((Long, Long), Long)): Int =
+//          Ordering[Long].compare(x._1._2, y._1._2)
+//    })._1._2 + 1L
+//    println("nume: >%s<".format(nume))
+
+//    // some handy constants
+//    val e0 = hc.vReplicate(nume, 0L, Option(0L))
+//    val e1 = hc.vReplicate(nume, 1L, Option(0L))
+//
+//    // use distributed context-specific utility to convert from RDD to
+//    // adjacency LagMatrix
+//    val Binc = hc.mFromRcvRdd((numv, nume), B, 0L)
+//    println("Binc: >\n%s<".format(hc.mToString(Binc, long2Str)))
+
+    // C = A*B;
+    val Ctri = hc.mTm(sr, Aadj, Aadj).hM(sr, Aadj)
+    println("Ctri: >\n%s<".format(hc.mToString(Ctri, long2Str)))
+
+//    // functor for "nnz( C==2 )"
+//    def ceq2(a: Long): (Long) = {
+//      if (a == 2L) 1L else 0L
+//    }
+    // numTriangles = nnz( C==2 ) / 3;
+    val count = Ctri.tV(sr, vOne).reduce(sr.addition, sr.addition, 0L) / 6L
+
+    if (DEBUG) {
+      println("Ctri.tV(sr, vOne): >\n%s<".format(hc.vToString(Ctri.tV(sr, vOne), long2Str)))
+    }
+
+    println("Triangle count: >%s<".format(count))
+
+  }
+
+  // ********
   def main(args: Array[String]): Unit = {
     Logger.getLogger("org").setLevel(Level.OFF)
     Logger.getLogger("akka").setLevel(Level.OFF)
@@ -1250,9 +1449,11 @@ object TestMain {
 //    TestMain.LagDstrContext_mTmV3(sc)
 //    TestMain.LagDstrContext_mTvV3(sc)
 //    TestMain.LagDstrContext_vToMrowV3(sc)
-    TestMain.LagDstrContext_transposeV3(sc)
+//    TestMain.LagDstrContext_transposeV3(sc)
 //    TestMain.LagDstrContext_wolf2015task(sc)
-//    TestMain.LagDstrContext_truss(sc)
+//    TestMain.LagDstrContext_samsi2017static_algo4_truss(sc)
+//    TestMain.LagDstrContext_samsi2017static_algo1_tricnt(sc)
+    TestMain.LagDstrContext_samsi2017static_algo2_tricnt(sc)
   }
 }
 // scalastyle:on println
