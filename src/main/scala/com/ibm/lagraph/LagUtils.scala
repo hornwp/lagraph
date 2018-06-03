@@ -211,6 +211,8 @@ object LagUtils {
   def adjacencyFileToRcv(sc: SparkContext,
                          fspec: String,
                          minPartitions: Option[Int] = None): RDD[(Long, Long)] = {
+    // offset
+    val off = if (fspec.endsWith(".tsv")) 1L else 0L
     // Load and parse the data
     val data =
       if (minPartitions == None) {
@@ -219,8 +221,8 @@ object LagUtils {
         sc.textFile(fspec, minPartitions = minPartitions.get)
       }
     data.map { line =>
-      val parts = line.split(' ')
-      (parts(0).toLong, parts(1).toLong)
+      val parts = line.split("\\s+")
+      (parts(0).toLong - off, parts(1).toLong - off)
     }
   }
 
@@ -238,6 +240,29 @@ object LagUtils {
         url.openStream()
       }
     }
+  }
+
+  /**
+   * Given an rcRdd representation of an adjacency matrix find the number of Vertices.
+   *
+   *  Finds the largest vertex index in an edge and then adds +1L
+   *
+   *  @param sc a spark context
+   *  @param rcRdd representation of an adjacency matrix
+   *  @return number of vertices
+   */
+  def rcMaxIndex(rcRdd: RDD[(Long, Long)]): Long = {
+    def findMaxIndex(rcGraph: RDD[(Long, Long)]): Long = {
+      val numvEdge = rcGraph.max()(new Ordering[Tuple2[Long, Long]]() {
+        override def compare(x: (Long, Long), y: (Long, Long)): Int = {
+          val xm = if (x._1 > x._2) x._1 else x._2
+          val ym = if (y._1 > y._2) y._1 else y._2
+          Ordering[Long].compare(xm, ym)
+        }
+      })
+      if (numvEdge._1 > numvEdge._2) numvEdge._1 else numvEdge._2
+    }
+    findMaxIndex(rcRdd) + 1L
   }
 
   /**

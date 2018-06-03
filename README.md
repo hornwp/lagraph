@@ -37,7 +37,7 @@ resolvers ++= Seq(
    "sonatype-snaphots" at "https://oss.sonatype.org/content/repositories/snapshots"
    )
 
-libraryDependencies += "com.github.ibm" %% "lagraph-core" % "0.1.0-SNAPSHOT"
+libraryDependencies += "com.github.ibm" %% "lagraph-core" % "0.2.0-SNAPSHOT"
 ```
 
 For Maven:
