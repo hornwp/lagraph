@@ -6,7 +6,7 @@ publishMavenStyle := true
 
 version := "0.2.0-SNAPSHOT"
 
-sparkVersion := "2.2.0"
+sparkVersion := "2.3.0"
 
 scalaVersion := {
   if (sparkVersion.value >= "2.0.0") {
