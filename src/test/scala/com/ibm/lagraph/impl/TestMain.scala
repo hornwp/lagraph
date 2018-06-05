@@ -1273,13 +1273,13 @@ object TestMain {
     // ****
     // read and initialize adjacency matrix
     val fspecAdj = root + file + "_adj.tsv"
-    val rcRddAdj = LagUtils.adjacencyFileToRcv(sc, fspecAdj)
+    val rcRddAdj = LagUtils.fileToRcRdd(sc, fspecAdj)
     val numv = LagUtils.rcMaxIndex(rcRddAdj)
     val A = rcRddAdj.map{e => ((e._1, e._2), LongOne)}
 
     // read and initialize incidence matrix
     val fspecInc = root + file + "_inc.tsv"
-    val rcRddInc = LagUtils.adjacencyFileToRcv(sc, fspecInc)
+    val rcRddInc = LagUtils.fileToRcRdd(sc, fspecInc)
     val B = rcRddInc.flatMap{e =>
       // filter vertices not in adjacency
       if (e._1 < numv && e._2 < numv) List((e._1, e._2)) else None

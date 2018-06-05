@@ -208,7 +208,7 @@ object LagUtils {
     *         to sc.defaultMinPartitions.
     *  @return an RDD of edges
     */
-  def adjacencyFileToRcv(sc: SparkContext,
+  def fileToRcRdd(sc: SparkContext,
                          fspec: String,
                          minPartitions: Option[Int] = None): RDD[(Long, Long)] = {
     // offset
