@@ -1216,5 +1216,13 @@ object GpiSparseRowMatrix extends Serializable {
     val ncol = colRange._2 - colRange._1
     fromMap(toMap(aa).foldLeft(List.empty[((Int, Int), T)])(accum), sparseValue, nrow, ncol)
   }
+  def nnz[T: ClassTag](aa: GpiAdaptiveVector[GpiAdaptiveVector[T]]): Long = {
+    var nnzCount = 0L
+    val rvIter = aa.denseIterator
+    for (rv <- rvIter) {
+      nnzCount = rv._2.denseCount.toLong + nnzCount
+    }
+    nnzCount
+  }
 }
 // scalastyle:on println
