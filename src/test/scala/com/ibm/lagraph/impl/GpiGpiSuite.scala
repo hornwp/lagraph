@@ -26,6 +26,16 @@ import com.ibm.lagraph._
 
 class GpiGpiSuite extends FunSuite with Matchers {
 
+  def mTm[A](
+      a: Vector[Vector[A]],
+      b: Vector[Vector[A]])(implicit n: Numeric[A]): Vector[Vector[A]] = {
+    import n._
+    for (row <- a)
+      yield
+        for (col <- b.transpose)
+          yield row zip col map Function.tupled(_ * _) reduceLeft (_ + _)
+  }
+
   test("GpiOps.gpi_replicate") {
     val sparseValue: Int = 0
     val size = 100
@@ -134,27 +144,59 @@ class GpiGpiSuite extends FunSuite with Matchers {
     a.map(x => x.toArray).toArray
   }
 
+  // ********
   test("GpiOps.gpi_m_times_m") {
-    // the matrix
-    val nv = 16
-    val raw = (1 to nv * nv).toVector
-    val a = raw.grouped(nv).toVector
-    // the scala result
-    val resScala = mult(a, a)
+    //def GpiOps_gpi_m_times_m(): Unit = {
+    val DEBUG = true
+    val graphSizes = List(1, 2, 3, 10, 11, 12)
+    for (l <- graphSizes) {
+      for (m <- graphSizes) {
+        for (n <- graphSizes) {
+          if (DEBUG) println(
+            "GpiOps.gpi_m_times_m: l: >%s<, m: >%s<, n: >%s<".format(
+              l, m, n))
 
-    // the gpi result
-    // start w/ transpose end up w/ transpose
-    val at = a.transpose
-    val aGpi = GpiSparseRowMatrix.fromVector(a, 0)
-    val atGpi = GpiSparseRowMatrix.fromVector(at, 0)
-    def f(x: Int, y: Int): Int = { x + y }
-    def g(x: Int, y: Int): Int = { x * y }
-    val x = GpiOps.gpi_m_times_m(f, g, f, 0, aGpi, atGpi, Option(0), Option(0))
-    val resGpi = GpiSparseRowMatrix.toVector(x).transpose
+          // ref
+          val refA = Vector.tabulate(l, m)((r, c) => r * m + c + 1L)
+          val refB = Vector.tabulate(m, n)((r, c) => r * n + c + 101L)
+          val refC = mTm(refA, refB)
+          //              if (DEBUG) {
+          //                println("refA")
+          //                println(refA)
+          //                println("refB")
+          //                println(refB)
+          //                println("refC")
+          //                println(refC)
+          //              }
 
-    assert(toArray(resGpi).deep == toArray(resScala).deep)
+          val gpiA = GpiSparseRowMatrix.fromVector(refA, 0L)
+          val gpiBt = GpiSparseRowMatrix.fromVector(refB.transpose, 0L)
 
+          //            if (DEBUG) {
+          //              println("gpiA")
+          //              println(gpiA)
+          //              println("gpiBt")
+          //              println(gpiBt)
+          //            }
+          def f(x: Long, y: Long): Long = { x + y }
+          def g(x: Long, y: Long): Long = { x * y }
+
+          // the gpi result
+          // start w/ transpose end up w/ transpose
+          val gpiC = GpiOps.gpi_m_times_m(f, g, f, 0L, gpiA, gpiBt, Option(0L), Option(0L))
+          //            if (DEBUG) {
+          //              println("gpiC")
+          //              println(gpiC)
+          //            }
+
+          // compare
+          val resGpiT = GpiSparseRowMatrix.toVector(gpiC).transpose
+          assert(toArray(resGpiT).deep == toArray(refC).deep)
+        }
+      }
+    }
   }
+
 
   test("GpiSparseRowMatrix") {
     val frm: Map[Int, Map[Int, Double]] = Map(1 -> Map(1 -> 1.0))
