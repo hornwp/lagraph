@@ -492,20 +492,22 @@ object GpiOps {
     val ncol = a.size
     val sparseValueT40 = sparseValueT4Opt.getOrElse(zero)
     val rMM = MMap[Int, GpiAdaptiveVector[T4]]()
-    for (row <- 0 until nrow) { // 3
+    val rvIter = u.denseIterator
+    for (rv <- rvIter) { // 3
       val cMM = MMap[Int, T4]()
-      for (col <- 0 until ncol) { // 4
+      val cvIter = a.denseIterator
+      for (cv <- cvIter) { // 4
         val v = gpi_innerp(
           f,
           g,
           c,
           zero,
-          u(row), // 3
-          a(col), // 4
+          rv._2, // 3
+          cv._2, // 4
           sparseValueT3Opt)
-        if (v != sparseValueT40) cMM(col) = v
+        if (v != sparseValueT40) cMM(cv._1) = v
       }
-      rMM(row) = GpiAdaptiveVector.fromMap(cMM.toMap, sparseValueT40, ncol, a.threshold)
+      rMM(rv._1) = GpiAdaptiveVector.fromMap(cMM.toMap, sparseValueT40, ncol, a.threshold)
     }
     val er = GpiAdaptiveVector.fillWithSparse(ncol)(sparseValueT40)
     GpiAdaptiveVector.fromMap(rMM.toMap, er, nrow, a.threshold)
