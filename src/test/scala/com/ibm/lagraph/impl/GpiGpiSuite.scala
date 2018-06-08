@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 import com.ibm.lagraph._
 
 class GpiGpiSuite extends FunSuite with Matchers {
+  val DEBUG = false
 
   def mTm[A](
       a: Vector[Vector[A]],
@@ -146,8 +147,8 @@ class GpiGpiSuite extends FunSuite with Matchers {
 
   // ********
   test("GpiOps.gpi_m_times_m") {
-    //def GpiOps_gpi_m_times_m(): Unit = {
-    val DEBUG = true
+    //  def GpiOps_gpi_m_times_m(): Unit = {
+    //    val DEBUG = true
     val graphSizes = List(1, 2, 3, 10, 11, 12)
     for (l <- graphSizes) {
       for (m <- graphSizes) {

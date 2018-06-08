@@ -402,7 +402,7 @@ class GpiAdaptiveVectorSuite extends FunSuite with Matchers {
     val re = List(1, 1, 2, 3, 4, 5, 6, 7, 9)
     GpiAdaptiveVectorSuite.checkDenseVector(r, v2Dense.length, sparseValue, 10, re)
   }
-  test("gpizip: sradd: Sparse-Sparse") {
+  test("gpizip: sradd: Sparse-Sparse a") {
     val v2Sparse =
       GpiAdaptiveVector.fromSeq(Vector(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), sparseValue)
     val v1Sparse =
@@ -411,6 +411,26 @@ class GpiAdaptiveVectorSuite extends FunSuite with Matchers {
     if (DEBUG) println("r: >%s<".format(r))
     val re = (List(2), List(1))
     GpiAdaptiveVectorSuite.checkSparseVector(r, v2Sparse.length, sparseValue, 1, re)
+  }
+  test("gpizip: sradd: Sparse-Sparse b") {
+    val v2Sparse =
+      GpiAdaptiveVector.fromSeq(Vector(0, 0, 1, 0, 0, 0, 0, 0, 0, 0), sparseValue)
+    val v1Sparse =
+      GpiAdaptiveVector.fromSeq(Vector(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), sparseValue)
+    val r = GpiAdaptiveVector.gpi_zip(sradd, v1Sparse, v2Sparse, sparseValue)
+    if (DEBUG) println("r: >%s<".format(r))
+    val re = (List(2), List(1))
+    GpiAdaptiveVectorSuite.checkSparseVector(r, v2Sparse.length, sparseValue, 1, re)
+  }
+  test("gpizip: sradd: Sparse-Sparse mixed") {
+    val v2Sparse =
+      GpiAdaptiveVector.fromSeq(Vector(0, 0, 1, 0, 0, 0, 0, 1, 0, 0), sparseValue)
+    val v1Sparse =
+      GpiAdaptiveVector.fromSeq(Vector(0, 0, 0, 0, 0, 0, 0, 1, 0, 1), sparseValue)
+    val r1 = GpiAdaptiveVector.gpi_zip(sradd, v1Sparse, v2Sparse, sparseValue, Option(0.5))
+    if (DEBUG) println("r: >%s<".format(r1))
+    val re = (List(2, 7, 9), List(1, 2, 1))
+    GpiAdaptiveVectorSuite.checkSparseVector(r1, v2Sparse.length, sparseValue, 3, re)
   }
   test("gpizip: sradd: Sparse-Sparse all zeroes") {
     val v2Sparse =

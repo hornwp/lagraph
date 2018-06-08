@@ -378,7 +378,9 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
     val ftype = f match {
       case sg: LagSemigroup[_] => {
         // TODO TODO need to fix this!
-        if (sg.annihilator.isEmpty) "notspecified"
+        if (sg.annihilator.isEmpty) {
+          if (u.sparseValue == v.sparseValue) "addition" else "notspecified"
+        }
         else {
           val aga = sg.annihilator.get
           if (aga == u.sparseValue && aga == v.sparseValue) {
@@ -463,7 +465,80 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
             }
           }
         }
-      }
+      } // end multiplication
+      case "addition" => {
+        (u, v) match {
+          case (uSparse: GpiSparseVector[VS], vSparse: GpiSparseVector[T2]) => {
+            // x            println("AdaptiveVector: gpi_zip: Addition, uSparse, vSparse")
+            val (rv, denseCountC, ops) =
+              GpiBuffer.gpiZipSparseSparseToSparseMerge(uSparse.rv,
+                                                        vSparse.rv,
+                                                        uSparse.length,
+                                                        uSparse.sparseValue,
+                                                        vSparse.sparseValue,
+                                                        sparseValue,
+                                                        f)
+            if (stats.isDefined) stats.get.increment(f, ops)
+            // cover case where sparse becomes dense, eg x - x
+            // TODO need unit test
+            if (denseCountC < uSparse.length * threshold) {
+              GpiSparseVector[T3](rv, sparseValue, u.length, threshold)
+            } else {
+              GpiDenseVector[T3](GpiAdaptiveVector.toDenseBuffer(rv, sparseValue, u.length),
+                                 sparseValue,
+                                 denseCountC,
+                                 threshold)
+            }
+          }
+          case (uSparse: GpiSparseVector[VS], vDense: GpiDenseVector[T2]) => {
+            // x            println("AdaptiveVector: gpi_zip: Addition, uSparse, vDense")
+            val (vc, denseCountC, ops) =
+            GpiBuffer.gpiZipSparseDenseToDense(uSparse.rv,
+                                               vDense.iseq,
+                                               uSparse.length,
+                                               uSparse.sparseValue,
+                                               vDense.sparseValue,
+                                               sparseValue,
+                                               f)
+            if (stats.isDefined) stats.get.increment(f, ops)
+            GpiDenseVector[T3](vc, sparseValue, denseCountC, threshold)
+          }
+          case (uDense: GpiDenseVector[VS], vSparse: GpiSparseVector[T2]) => {
+            //            println("AdaptiveVector: gpi_zip: Addition, uDense, vSparse")
+            val (vc, denseCountC, ops) =
+            GpiBuffer.gpiZipDenseSparseToDense(uDense.iseq,
+                                               vSparse.rv,
+                                               uDense.length,
+                                               uDense.sparseValue,
+                                               vSparse.sparseValue,
+                                               sparseValue,
+                                               f)
+            if (stats.isDefined) stats.get.increment(f, ops)
+            GpiDenseVector[T3](vc, sparseValue, denseCountC, threshold)
+          }
+          case (uDense: GpiDenseVector[VS], vDense: GpiDenseVector[T2]) => {
+            // x            println("AdaptiveVector: gpi_zip: Addition, uDense, vDense")
+            val (vC, denseCountC, ops) =
+              GpiBuffer.gpiZipDenseDenseToDense(uDense.iseq,
+                                                vDense.iseq,
+                                                uDense.length,
+                                                uDense.sparseValue,
+                                                vDense.sparseValue,
+                                                sparseValue,
+                                                f)
+            if (stats.isDefined) stats.get.increment(f, ops)
+            // cover case where dense becomes sparse TODO unit test
+            if (denseCountC < uDense.length * threshold) {
+              GpiSparseVector[T3](GpiAdaptiveVector.toSparseBuffers(vC, sparseValue, denseCountC),
+                                  sparseValue,
+                                  uDense.length,
+                                  threshold)
+            } else {
+              GpiDenseVector[T3](vC, sparseValue, denseCountC, threshold)
+            }
+          }
+        }
+      } // end addition
       case "notspecified" => {
         val (vC, denseCountC, ops) = (u, v) match {
           case (uSparse: GpiSparseVector[VS], vSparse: GpiSparseVector[T2]) => {
@@ -526,7 +601,7 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
         val t01 = LagUtils.tt(t0, t1)
         // x        println("AdaptiveVector: gpi_zip: stop: time: >%.3f< s".format(t01))
         res
-      }
+      } // end notspecified
     }
   }
   def gpi_zip_with_index_special[@spec(Int) VS: ClassTag, @spec(Int) T3: ClassTag](

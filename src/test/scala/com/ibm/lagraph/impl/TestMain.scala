@@ -1596,6 +1596,60 @@ object TestMain {
       }
     }
   }
+  // ********
+  //  test("gpizip:  sradd: etc") {
+  def gpizip_sradd_etc(): Unit = {
+    val DEBUG = true
+    val sparseValue = 0
+    // operations for traditional semiring w/ multiplication and addition
+    val sr = LagSemiring.plus_times[Int]
+    val srmul = sr.multiplication
+    val sradd = sr.addition
+    if (true) {
+      val v2Sparse =
+        GpiAdaptiveVector.fromSeq(Vector(0, 0, 1, 0, 0, 0, 0, 0, 0, 0), sparseValue)
+      val zv4 = GpiAdaptiveVector.gpi_zip(sradd, v2Sparse, v2Sparse, sparseValue)
+      if (DEBUG) println("GpiSparseVector((GpiBuffer(2),GpiBuffer(2)),0,10)", zv4)
+      val mv3e = (List(2), List(2))
+    }
+    if (true) {
+      val v2Sparse =
+        GpiAdaptiveVector.fromSeq(Vector(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), sparseValue)
+      val v1Sparse =
+        GpiAdaptiveVector.fromSeq(Vector(0, 0, 1, 0, 0, 0, 0, 0, 0, 0), sparseValue)
+      val r = GpiAdaptiveVector.gpi_zip(sradd, v1Sparse, v2Sparse, sparseValue)
+      if (DEBUG) println("r: >%s<".format(r))
+      val re = (List(2), List(1))
+    }
+    if (true) {
+      val v2Sparse =
+        GpiAdaptiveVector.fromSeq(Vector(0, 0, 1, 0, 0, 0, 0, 0, 0, 0), sparseValue)
+      val v1Sparse =
+        GpiAdaptiveVector.fromSeq(Vector(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), sparseValue)
+      val r = GpiAdaptiveVector.gpi_zip(sradd, v1Sparse, v2Sparse, sparseValue)
+      if (DEBUG) println("r: >%s<".format(r))
+      val re = (List(2), List(1))
+    }
+    if (true) {
+      val v2Sparse =
+        GpiAdaptiveVector.fromSeq(Vector(0, 0, 1, 0, 0, 0, 0, 1, 0, 0), sparseValue)
+      val v1Sparse =
+        GpiAdaptiveVector.fromSeq(Vector(0, 0, 0, 0, 0, 0, 0, 1, 0, 1), sparseValue)
+      val r = GpiAdaptiveVector.gpi_zip(sradd, v1Sparse, v2Sparse, sparseValue, Option(0.4))
+      if (DEBUG) println("r: >%s<".format(r))
+      val re = (List(2, 7, 9), List(1, 2, 1))
+    }
+    
+    if (true) {
+      val v2Sparse =
+        GpiAdaptiveVector.fromSeq(Vector(0, 0, 1, 0, 0, 0, 0, 1, 0, 0), sparseValue)
+      val v1Sparse =
+        GpiAdaptiveVector.fromSeq(Vector(0, 0, 0, 0, 0, 0, 0, 1, 0, 1), sparseValue)
+      val r1 = GpiAdaptiveVector.gpi_zip(sradd, v1Sparse, v2Sparse, sparseValue, Option(0.5))
+      if (DEBUG) println("r: >%s<, densecount: >%s<".format(r1, r1.denseCount))
+      val re = (List(2, 7, 9), List(1, 2, 1))
+    }
+  }
 
   // ********
   def main(args: Array[String]): Unit = {
@@ -1619,7 +1673,8 @@ object TestMain {
     //    TestMain.LagDstrContext_samsi2017static_algo4_truss(sc)
     //    TestMain.LagDstrContext_samsi2017static_algo1_tricnt(sc)
     //    TestMain.LagDstrContext_samsi2017static_algo2_tricnt(sc)
-    TestMain.GpiOps_gpi_m_times_m()
+    //    TestMain.GpiOps_gpi_m_times_m()
+    TestMain.gpizip_sradd_etc()
   }
 }
 // scalastyle:on println

@@ -528,6 +528,72 @@ object GpiBuffer {
     }
   }
 
+  def gpiZipSparseSparseToSparseMerge[@spec(Int) A: ClassTag,
+                                      @spec(Int) B: ClassTag,
+                                      @spec(Int) C: ClassTag](
+      rvA: (GpiBuffer[Int], GpiBuffer[A]),
+      rvB: (GpiBuffer[Int], GpiBuffer[B]),
+      len: Int,
+      sparseValueA: A,
+      sparseValueB: B,
+      sparseValueC: C,
+      f: (A, B) => C): ((GpiBuffer[Int], GpiBuffer[C]), Int, Int) = {
+    require(sparseValueA == sparseValueB)
+    val t0 = System.nanoTime()
+    val lenA = rvA._1.length
+    val lenB = rvB._1.length
+    var rvCr = List[Int]()
+    var rvCv = List[C]()
+    var iiA = 0
+    var iiB = 0
+    var iiC = 0
+    var iiO = 0
+    var iiAok = iiA < lenA
+    var iiBok = iiB < lenB
+    while (iiAok || iiBok) {
+      if (iiAok && (! iiBok || rvA._1(iiA) < rvB._1(iiB))) {
+        val v = f(rvA._2(iiA), sparseValueB)
+        if (v != sparseValueC) {
+          rvCr = rvA._1(iiA) :: rvCr
+          rvCv =  v :: rvCv
+        }
+        iiA += 1
+        iiAok = iiA < lenA
+        iiO += 1
+      } else if (iiBok && (! iiAok || rvA._1(iiA) > rvB._1(iiB))) {
+        val v = f(sparseValueA, rvB._2(iiB))
+        if (v != sparseValueC) {
+          rvCr = rvB._1(iiB) :: rvCr
+          rvCv = v :: rvCv
+        }
+        iiB += 1
+        iiBok = iiB < lenB
+        iiO += 1
+      } else {
+        val v = f(rvA._2(iiA), rvB._2(iiB))
+        if (v != sparseValueC) {
+          rvCr = rvA._1(iiA) :: rvCr
+          rvCv = v :: rvCv
+        }
+        iiO += 1
+        iiA += 1
+        iiB += 1
+        iiAok = iiA < lenA
+        iiBok = iiB < lenB
+      }
+    }
+    val t1 = System.nanoTime()
+    val t01 = LagUtils.tt(t0, t1)
+    if (false) {
+      println(
+        "GpiBuffer: gpiZipSparseSparseToSparseMerge: lenA < lenB: time: >%.3f< s"
+          .format(t01))
+    }
+    assert(rvCr.size == rvCv.size)
+    iiC = rvCr.size
+    ((GpiBuffer(rvCr.reverse.toArray, iiC), GpiBuffer(rvCv.reverse.toArray, iiC)), iiC, iiO)
+  }
+
   def gpiZipSparseDenseToDense[@spec(Int) A: ClassTag,
                                @spec(Int) B: ClassTag,
                                @spec(Int) C: ClassTag](rvA: (GpiBuffer[Int], GpiBuffer[A]),
