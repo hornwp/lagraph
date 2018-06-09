@@ -381,8 +381,8 @@ object GpiOps {
 //      Option(activeStats)
 //    )
 //    res
-    val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero)
-    val mSparse = GpiAdaptiveVector.fillWithSparse(u(1).size)(vSparse)
+    val vSparse = GpiAdaptiveVector.fillWithSparse(u(1).size)(zero)
+    val mSparse = GpiAdaptiveVector.fillWithSparse(a.size)(vSparse)
     mSparse
     //    val t1 = System.nanoTime()
     //    val t01 = LagUtils.tt(t0, t1)
