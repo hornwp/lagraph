@@ -292,59 +292,57 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
   }
 
   /**
-    * Creates a new vector by applying a unary operator to all elements of the input vector.
-    *
-    *  @tparam T1 the input vector type.
-    *  @tparam T2 the output vector type.
-    *  @param f the unary operator.
-    *  @param u the input vector
-    *
-    */
+   * Creates a new vector by applying a unary operator to all elements of the input vector.
+   *
+   *  @tparam T1 the input vector type.
+   *  @tparam T2 the output vector type.
+   *  @param f the unary operator.
+   *  @param u the input vector
+   *
+   */
   def gpi_map[@spec(Int) VS: ClassTag, @spec(Int) T2: ClassTag](
-      f: (VS) => T2,
-      u: GpiAdaptiveVector[VS],
-      sparseValue: T2,
-      thresholdOpt: Option[Double] = None,
-      stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T2] = {
+      f:            (VS) => T2,
+      u:            GpiAdaptiveVector[VS],
+      sparseValue:  T2,
+      thresholdOpt: Option[Double]                 = None,
+      stats:        Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T2] = {
     val threshold =
       if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
     val xVS = classTag[VS]
     val xT2 = classTag[T2]
-
-    val ((bC, denseCountC, ops), utype) =
-      u match {
-        case uSparse: GpiSparseVector[VS] => {
-          (GpiBuffer.gpiMapSparseBuffersToDenseBuffer(uSparse.rv,
-                                                      uSparse.length,
-                                                      uSparse.sparseValue,
-                                                      sparseValue,
-                                                      f),
-           "sparse")
-        }
-        case uDense: GpiDenseVector[VS] => {
-          (GpiBuffer.gpiMapDenseBufferToDenseBuffer(uDense.iseq, sparseValue, f), "dense")
+    val utype = u match {
+      case _: GpiSparseVector[VS] => "sparse"
+      case _: GpiDenseVector[VS] => "dense"
+    }
+    u match {
+      case uSparse: GpiSparseVector[VS] => {
+        require(sparseValue == f(u.sparseValue), "TODO: sparse issue")
+        val (r, v, ops) = GpiBuffer.gpiMapSparseBuffersToSparseBuffers(
+          uSparse.rv,
+          sparseValue,
+          f)
+        if (stats.isDefined) stats.get.increment(f, ops)
+        GpiSparseVector[T2](
+          (r, v),
+          sparseValue,
+          u.length,
+          threshold)
+      }
+      case uDense: GpiDenseVector[VS] => {
+        val (bC, denseCountC, ops) = GpiBuffer.gpiMapDenseBufferToDenseBuffer(uDense.iseq, sparseValue, f)
+        ((bC, denseCountC, ops), "dense")
+        if (stats.isDefined) stats.get.increment(f, ops)
+        if (denseCountC < u.length * threshold) {
+          GpiSparseVector[T2](
+            GpiAdaptiveVector.toSparseBuffers(bC, sparseValue, denseCountC),
+            sparseValue,
+            u.length,
+            threshold)
+        } else {
+          GpiDenseVector[T2](bC, sparseValue, denseCountC, threshold)
         }
       }
-    if (stats.isDefined) stats.get.increment(f, ops)
-
-    val t0 = System.nanoTime()
-    val res = if (denseCountC < u.length * threshold) {
-      // x      println("AdaptiveVector: gpi_map: start denseToSparse: VS: >%s<, T2: >%s<".
-      //          format(xVS, xT2))
-      GpiSparseVector[T2](GpiAdaptiveVector.toSparseBuffers(bC, sparseValue, denseCountC),
-                          sparseValue,
-                          u.length,
-                          threshold)
-    } else {
-      // x      println("AdaptiveVector: gpi_map: start denseToDense: VS: >%s<, T2: >%s<".
-      //          format(xVS, xT2))
-      GpiDenseVector[T2](bC, sparseValue, denseCountC, threshold)
     }
-    val t1 = System.nanoTime()
-    val t01 = LagUtils.tt(t0, t1)
-    // x    println("AdaptiveVector: gpi_map: stop: utype: >%s<, time: >%.3f< s".
-    //        format(utype, t01))
-    res
   }
 
   /**
@@ -1291,13 +1289,14 @@ object GpiSparseRowMatrix extends Serializable {
     val ncol = colRange._2 - colRange._1
     fromMap(toMap(aa).foldLeft(List.empty[((Int, Int), T)])(accum), sparseValue, nrow, ncol)
   }
-  def nnz[T: ClassTag](aa: GpiAdaptiveVector[GpiAdaptiveVector[T]]): Long = {
-    var nnzCount = 0L
-    val rvIter = aa.denseIterator
-    for (rv <- rvIter) {
-      nnzCount = rv._2.denseCount.toLong + nnzCount
-    }
-    nnzCount
-  }
+// NON PERFORMANT
+//  def nnz[T: ClassTag](aa: GpiAdaptiveVector[GpiAdaptiveVector[T]]): Long = {
+//    var nnzCount = 0L
+//    val rvIter = aa.denseIterator
+//    for (rv <- rvIter) {
+//      nnzCount = rv._2.denseCount.toLong + nnzCount
+//    }
+//    nnzCount
+//  }
 }
 // scalastyle:on println
