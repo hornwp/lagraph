@@ -460,6 +460,10 @@ object GpiOps {
     val k = dbs.length
     var newDenseCount = 0
     while (i < k) {
+    dbs(i) match {
+      case _: GpiSparseVector[_] => print ("s%s".format(dbs(i).denseCount))
+      case _: GpiDenseVector[_] => print ("d%s".format(dbs(i).denseCount))
+    }
           bs(i) = gpi_m_times_v(f,
                                 g,
                                 c,
