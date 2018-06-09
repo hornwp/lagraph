@@ -369,30 +369,33 @@ object GpiOps {
     val activeStats =
       if (stats.isDefined) stats.get else GpiAdaptiveVector.Stat.Stat()
     val t0 = System.nanoTime()
-    val res: GpiAdaptiveVector[GpiAdaptiveVector[T4]] = gpi_map(
-      gpi_m_times_v(f,
-                    g,
-                    c,
-                    zero,
-                    a,
-                    _: GpiAdaptiveVector[T2],
-                    Option(activeStats)),
-      u,
-      Option(activeStats)
-    )
-    val t1 = System.nanoTime()
-    val t01 = LagUtils.tt(t0, t1)
-    val utype = u match {
-      case _: GpiSparseVector[_] => "sparse"
-      case _: GpiDenseVector[_] => "dense"
-    }
-    val vtype = res match {
-      case _: GpiSparseVector[_] => "sparse"
-      case _: GpiDenseVector[_] => "dense"
-    }
+//    val res: GpiAdaptiveVector[GpiAdaptiveVector[T4]] = gpi_map(
+//      gpi_m_times_v(f,
+//                    g,
+//                    c,
+//                    zero,
+//                    a,
+//                    _: GpiAdaptiveVector[T2],
+//                    Option(activeStats)),
+//      u,
+//      Option(activeStats)
+//    )
+//    res
+    val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero)
+    val mSparse = GpiAdaptiveVector.fillWithSparse(u(1).size)(vSparse)
+    mSparse
+    //    val t1 = System.nanoTime()
+    //    val t01 = LagUtils.tt(t0, t1)
+    //    val utype = u match {
+    //      case _: GpiSparseVector[_] => "sparse"
+    //      case _: GpiDenseVector[_] => "dense"
+    //    }
+    //    val vtype = res match {
+    //      case _: GpiSparseVector[_] => "sparse"
+    //      case _: GpiDenseVector[_] => "dense"
+    //    }
     // c    println("GpiOps: gpi_m_times_m: complete: >%s< -> >%s<: time: >%.3f< s, %s"
     //        .format(utype, vtype, t01, activeStats))
-    res
 
   }
   def gpi_equiv[T: ClassTag](u: GpiAdaptiveVector[T], v: GpiAdaptiveVector[T]): Boolean = {
