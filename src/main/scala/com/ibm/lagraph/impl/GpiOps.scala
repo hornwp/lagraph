@@ -380,10 +380,6 @@ object GpiOps {
 //      u,
 //      Option(activeStats)
 //    )
-//    res
-    val vSparse = GpiAdaptiveVector.fillWithSparse(u(1).size)(zero)
-    val mSparse = GpiAdaptiveVector.fillWithSparse(a.size)(vSparse)
-    mSparse
     //    val t1 = System.nanoTime()
     //    val t01 = LagUtils.tt(t0, t1)
     //    val utype = u match {
@@ -396,6 +392,10 @@ object GpiOps {
     //    }
     // c    println("GpiOps: gpi_m_times_m: complete: >%s< -> >%s<: time: >%.3f< s, %s"
     //        .format(utype, vtype, t01, activeStats))
+//    res
+    val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero)
+    val mSparse = GpiAdaptiveVector.fillWithSparse(u(0).size)(vSparse)
+    mSparse
 
   }
   def gpi_equiv[T: ClassTag](u: GpiAdaptiveVector[T], v: GpiAdaptiveVector[T]): Boolean = {
