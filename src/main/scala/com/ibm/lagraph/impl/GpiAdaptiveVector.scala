@@ -303,20 +303,13 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
   def gpi_map[@spec(Int) VS: ClassTag, @spec(Int) T2: ClassTag](
       f:            (VS) => T2,
       u:            GpiAdaptiveVector[VS],
-      sparseValue:  T2,
-      thresholdOpt: Option[Double]                 = None,
       stats:        Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T2] = {
-    val threshold =
-      if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
+    val threshold = u.threshold
     val xVS = classTag[VS]
     val xT2 = classTag[T2]
-    val utype = u match {
-      case _: GpiSparseVector[VS] => "sparse"
-      case _: GpiDenseVector[VS] => "dense"
-    }
+    val sparseValue = f(u.sparseValue)
     u match {
       case uSparse: GpiSparseVector[VS] => {
-        require(sparseValue == f(u.sparseValue), "TODO: sparse issue")
         val (r, v, ops) = GpiBuffer.gpiMapSparseBuffersToSparseBuffers(
           uSparse.rv,
           sparseValue,
@@ -608,12 +601,10 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
       base: Long,
       zeroSourceOpt: Option[VS] = None,
       zeroTargetOpt: Option[T3] = None,
-      thresholdOpt: Option[Double] = None,
       stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T3] = {
     // no target zero specified, just grab one
     val sparseValue = zeroTargetOpt.getOrElse(f(u(0), 0L))
-    val threshold =
-      if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
+    val threshold = u.threshold
     val xVS = classTag[VS]
     val xT3 = classTag[T3]
     u match {
@@ -677,12 +668,10 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
       u: GpiAdaptiveVector[VS],
       base: Long,
       zeroTargetOpt: Option[T3] = None,
-      thresholdOpt: Option[Double] = None,
       stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T3] = {
     // no target zero specified, just grab one
     val sparseValue = zeroTargetOpt.getOrElse(f(u(0), 0L))
-    val threshold =
-      if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
+    val threshold = u.threshold
     val xVS = classTag[VS]
     val xT3 = classTag[T3]
     u match {
@@ -748,14 +737,12 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
       rowIndex: Long,
       base: Long,
       zeroTargetOpt: Option[T3] = None,
-      thresholdOpt: Option[Double] = None,
       stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T3] = {
 
     val visitDiagonalsOpt = None
     // no target zero specified, just grab one
     val sparseValue = zeroTargetOpt.getOrElse(f(u(0), (0L, 0L)))
-    val threshold =
-      if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
+    val threshold = u.threshold
     val xVS = classTag[VS]
     val xT3 = classTag[T3]
     u match {
@@ -835,12 +822,10 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
       visitDiagonalsOpt: Option[VS],
       zeroSourceOpt: Option[VS] = None,
       zeroTargetOpt: Option[T3] = None,
-      thresholdOpt: Option[Double] = None,
       stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T3] = {
     // no target zero specified, just grab one
     val sparseValue = zeroTargetOpt.getOrElse(f(u(0), (0L, 0L)))
-    val threshold =
-      if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
+    val threshold = u.threshold
     val xVS = classTag[VS]
     val xT3 = classTag[T3]
     u match {

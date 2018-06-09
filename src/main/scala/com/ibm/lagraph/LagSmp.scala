@@ -276,9 +276,7 @@ final case class LagSmpContext() extends LagContext {
                                         sr.addition,
                                         sr.zero,
                                         ma.vov,
-                                        na.transpose.asInstanceOf[LagSmpMatrix[T]].vov,
-                                        Option(msSparse),
-                                        Option(msSparse))
+                                        na.transpose.asInstanceOf[LagSmpMatrix[T]].vov)
       val mapMtM = GpiSparseRowMatrix.toMap(vovMtM).map {
         case (k, v) => ((k._1.toLong, k._2.toLong) -> v)
       }

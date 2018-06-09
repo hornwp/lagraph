@@ -97,17 +97,14 @@ object GpiOps {
   def gpi_map[@spec(Int) T1: ClassTag, @spec(Int) T2: ClassTag](
       f: (T1) => T2,
       u: GpiAdaptiveVector[T1],
-      sparseValueT2Opt: Option[T2] = None,
-      thresholdOpt: Option[Double] = None,
       stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T2] = {
-    val threshold =
-      if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
+    val threshold = u.threshold
     val t0 = System.nanoTime()
     // c    println("GpiOps: gpi_map: start")
     // infer sparseValue
-    val sparseValueT2 = sparseValueT2Opt.getOrElse(f(u.sparseValue))
+    val sparseValueT2 = f(u.sparseValue)
     val res =
-      GpiAdaptiveVector.gpi_map(f, u, sparseValueT2, Option(threshold), stats)
+      GpiAdaptiveVector.gpi_map(f, u, stats)
     val t1 = System.nanoTime()
     val t01 = LagUtils.tt(t0, t1)
     // c    println("GpiOps: gpi_map: complete: >%.3f< s".format(t01))
@@ -130,16 +127,12 @@ object GpiOps {
       f: (T1, T2) => T3,
       u: GpiAdaptiveVector[T1],
       v: GpiAdaptiveVector[T2],
-      sparseValueT3Opt: Option[T3] = None,
-      thresholdOpt: Option[Double] = None,
       stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T3] = {
-    val threshold =
-      if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
+    val threshold = u.threshold
     //      val t0 = System.nanoTime()
     //      println("GpiOps: gpi_zip: start")
     // infer sparseValue
-    val sparseValueT3 =
-      sparseValueT3Opt.getOrElse(f(u.sparseValue, v.sparseValue))
+    val sparseValueT3 = f(u.sparseValue, v.sparseValue)
 //    println("WHAT2!",u,v)
     val res = GpiAdaptiveVector.gpi_zip(f, u, v, sparseValueT3, Option(threshold), stats)
     //      val t1 = System.nanoTime()
@@ -152,10 +145,8 @@ object GpiOps {
       u: GpiAdaptiveVector[T1],
       base: Long = 0L,
       sparseValueT3Opt: Option[T3] = None,
-      thresholdOpt: Option[Double] = None,
       stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T3] = {
-    val threshold =
-      if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
+    val threshold = u.threshold
     //      val t0 = System.nanoTime()
     //      println("GpiOps: gpi_zip: start")
     // infer sparseValue
@@ -165,7 +156,6 @@ object GpiOps {
                                                            base,
                                                            Option(u.sparseValue),
                                                            sparseValueT3Opt,
-                                                           thresholdOpt,
                                                            stats)
     //    (f, u, v, sparseValueT3, Option(threshold), stats)
     //      val t1 = System.nanoTime()
@@ -178,16 +168,14 @@ object GpiOps {
       u: GpiAdaptiveVector[T1],
       base: Long = 0L,
       sparseValueT3Opt: Option[T3] = None,
-      thresholdOpt: Option[Double] = None,
       stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T3] = {
-    val threshold =
-      if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
+    val threshold = u.threshold
     //      val t0 = System.nanoTime()
     //      println("GpiOps: gpi_zip: start")
     // infer sparseValue
     //    val sparseValueT3 = sparseValueT3Opt.getOrElse(f(u.sparseValue, v.sparseValue))
     val res =
-      GpiAdaptiveVector.gpi_zip_with_index(f, u, base, sparseValueT3Opt, thresholdOpt, stats)
+      GpiAdaptiveVector.gpi_zip_with_index(f, u, base, sparseValueT3Opt, stats)
     //    (f, u, v, sparseValueT3, Option(threshold), stats)
     //      val t1 = System.nanoTime()
     //      val t01 = LagUtils.tt(t0, t1)
@@ -201,10 +189,8 @@ object GpiOps {
       base: Long = 0L,
       visitDiagonalsOpt: Option[T1] = None,
       sparseValueT3Opt: Option[T3] = None,
-      thresholdOpt: Option[Double] = None,
       stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T3] = {
-    val threshold =
-      if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
+    val threshold = u.threshold
     //      val t0 = System.nanoTime()
     //      println("GpiOps: gpi_zip: start")
     // infer sparseValue
@@ -216,7 +202,6 @@ object GpiOps {
                                                                   visitDiagonalsOpt,
                                                                   Option(u.sparseValue),
                                                                   sparseValueT3Opt,
-                                                                  thresholdOpt,
                                                                   stats)
     //    (f, u, v, sparseValueT3, Option(threshold), stats)
     //      val t1 = System.nanoTime()
@@ -230,10 +215,8 @@ object GpiOps {
       rowIndex: Long,
       base: Long = 0L,
       sparseValueT3Opt: Option[T3] = None,
-      thresholdOpt: Option[Double] = None,
       stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T3] = {
-    val threshold =
-      if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
+    val threshold = u.threshold
     //      val t0 = System.nanoTime()
     //      println("GpiOps: gpi_zip: start")
     // infer sparseValue
@@ -243,7 +226,6 @@ object GpiOps {
                                                           rowIndex,
                                                           base,
                                                           sparseValueT3Opt,
-                                                          thresholdOpt,
                                                           stats)
     //    (f, u, v, sparseValueT3, Option(threshold), stats)
     //      val t1 = System.nanoTime()
@@ -287,12 +269,9 @@ object GpiOps {
                                           zero: T4,
                                           u: GpiAdaptiveVector[T1],
                                           v: GpiAdaptiveVector[T2],
-                                          sparseValueT3Opt: Option[T3] = None,
-                                          thresholdOpt: Option[Double] = None,
                                           stats: Option[GpiAdaptiveVector.Stat] = None): T4 = {
-    val threshold =
-      if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
-    gpi_reduce(f, c, zero, gpi_zip(g, u, v, sparseValueT3Opt, Option(threshold), stats), stats)
+    val threshold = u.threshold
+    gpi_reduce(f, c, zero, gpi_zip(g, u, v, stats), stats)
   }
   // TODO too many parameters
   // scalastyle:off parameter.number
@@ -322,15 +301,9 @@ object GpiOps {
       zero: T4,
       a: GpiAdaptiveVector[GpiAdaptiveVector[T1]],
       u: GpiAdaptiveVector[T2],
-      sparseValueT3Opt: Option[T3] = None,
-      sparseValueT4Opt: Option[T4] = None,
-      innerpThresholdOpt: Option[Double] = None,
-      mapThresholdOpt: Option[Double] = None,
       stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T4] = {
-    val innerpThreshold =
-      if (innerpThresholdOpt.isDefined) innerpThresholdOpt.get else u.threshold
-    val mapThreshold =
-      if (mapThresholdOpt.isDefined) mapThresholdOpt.get else a.threshold
+    val innerpThreshold = u.threshold
+    val mapThreshold = a.threshold
     val defdstats = stats.isEmpty
     val activeStats =
       if (stats.isDefined) stats.get else GpiAdaptiveVector.Stat.Stat()
@@ -343,12 +316,8 @@ object GpiOps {
                  zero,
                  u,
                  _: GpiAdaptiveVector[T1],
-                 sparseValueT3Opt,
-                 Option(innerpThreshold),
                  Option(activeStats)),
       a,
-      sparseValueT4Opt,
-      Option(mapThreshold),
       Option(activeStats)
     )
     val t1 = System.nanoTime()
@@ -369,90 +338,8 @@ object GpiOps {
 
   // TODO too many parameters
   // scalastyle:off parameter.number
-//  /**
-//    * Matrix matrix multiplication
-//    *
-//    *  @tparam T1 LH matrix element type
-//    *  @tparam T2 RH matrix element type
-//    *  @tparam T3 output type of semiring multiplication
-//    *  @tparam T4 output type of semiring addition
-//    *  @param f semiring addition (commutative monoid with identity element)
-//    *  @param g semiring multiplication (a monoid)
-//    *  @param zero identity element for semiring addition
-//    *  @param a the LH matrix
-//    *  @param u the RH matrix
-//    *  @param sparseValue determines sparsity for output of semiring multiplication
-//    *  @param sparseValue determines sparsity for output of semiring addition
-//    *
-//    */
-//  def gpi_m_times_m_dm[@spec(Int) T1: ClassTag,
-//                    @spec(Int) T2: ClassTag,
-//                    @spec(Int) T3: ClassTag,
-//                    @spec(Int) T4: ClassTag](f: (T3, T4) => T4,
-//                                             g: (T2, T1) => T3,
-//                                             c: (T4, T4) => T4,
-//                                             zero: T4,
-//                                             a: GpiAdaptiveVector[GpiAdaptiveVector[T1]],
-//                                             u: GpiAdaptiveVector[GpiAdaptiveVector[T2]],
-//                                             sparseValueT3Opt: Option[T3] = None,
-//                                             sparseValueT4Opt: Option[T4] = None,
-//                                             innerpThresholdOpt: Option[Double] = None,
-//                                             mapThresholdOpt: Option[Double] = None,
-//                                             outerMapThresholdOpt: Option[Double] = None,
-//                                             stats: Option[GpiAdaptiveVector.Stat] = None)
-//    : GpiAdaptiveVector[GpiAdaptiveVector[T4]] = { // : GpiAdaptiveVector[Any] = { //
-//    val innerpThreshold =
-//      if (innerpThresholdOpt.isDefined) innerpThresholdOpt.get else u.threshold
-//    val mapThreshold =
-//      if (mapThresholdOpt.isDefined) mapThresholdOpt.get else a.threshold
-//    val outerMapThreshold =
-//      if (outerMapThresholdOpt.isDefined) outerMapThresholdOpt.get
-//      else a.threshold
-//    val defdstats = stats.isEmpty
-//    val activeStats =
-//      if (stats.isDefined) stats.get else GpiAdaptiveVector.Stat.Stat()
-//    val t0 = System.nanoTime()
-//    val avOfsparseValueT4Opt =
-//      if (sparseValueT4Opt.isDefined) {
-//        Option(GpiAdaptiveVector.fillWithSparse[T4](a.size)(sparseValueT4Opt.get))
-//      } else { None }
-//    val res: GpiAdaptiveVector[GpiAdaptiveVector[T4]] = gpi_map(
-//      gpi_m_times_v(f,
-//                    g,
-//                    c,
-//                    zero,
-//                    a,
-//                    _: GpiAdaptiveVector[T2],
-//                    sparseValueT3Opt,
-//                    sparseValueT4Opt,
-//                    Option(innerpThreshold),
-//                    Option(mapThreshold),
-//                    Option(activeStats)),
-//      u,
-//      avOfsparseValueT4Opt,
-//      Option(mapThreshold),
-//      Option(activeStats)
-//    )
-//    val t1 = System.nanoTime()
-//    val t01 = LagUtils.tt(t0, t1)
-//    val utype = u match {
-//      case _: GpiSparseVector[_] => "sparse"
-//      case _: GpiDenseVector[_] => "dense"
-//    }
-//    val vtype = res match {
-//      case _: GpiSparseVector[_] => "sparse"
-//      case _: GpiDenseVector[_] => "dense"
-//    }
-//    // c    println("GpiOps: gpi_m_times_m: complete: >%s< -> >%s<: time: >%.3f< s, %s"
-//    //        .format(utype, vtype, t01, activeStats))
-//    res
-//
-//  }
-  // TODO sort out threshold parameters
   /**
     * Matrix matrix multiplication
-    * 
-    * start w/ transpose end up w/ transpose
     *
     *  @tparam T1 LH matrix element type
     *  @tparam T2 RH matrix element type
@@ -467,50 +354,46 @@ object GpiOps {
     *  @param sparseValue determines sparsity for output of semiring addition
     *
     */
-  def gpi_m_times_m[@spec(Int) T1: ClassTag, @spec(Int) T2: ClassTag, @spec(Int) T3: ClassTag, @spec(Int) T4: ClassTag](
-    f:                    (T3, T4) => T4,
-    g:                    (T2, T1) => T3,
-    c:                    (T4, T4) => T4,
-    zero:                 T4,
-    a:                    GpiAdaptiveVector[GpiAdaptiveVector[T1]],
-    u:                    GpiAdaptiveVector[GpiAdaptiveVector[T2]],
-    sparseValueT3Opt:     Option[T3]                               = None,
-    sparseValueT4Opt:     Option[T4]                               = None,
-    innerpThresholdOpt:   Option[Double]                           = None,
-    mapThresholdOpt:      Option[Double]                           = None,
-    outerMapThresholdOpt: Option[Double]                           = None,
-    stats:                Option[GpiAdaptiveVector.Stat]           = None): GpiAdaptiveVector[GpiAdaptiveVector[T4]] = {
+  def gpi_m_times_m[@spec(Int) T1: ClassTag,
+                    @spec(Int) T2: ClassTag,
+                    @spec(Int) T3: ClassTag,
+                    @spec(Int) T4: ClassTag](f: (T3, T4) => T4,
+                                             g: (T2, T1) => T3,
+                                             c: (T4, T4) => T4,
+                                             zero: T4,
+                                             a: GpiAdaptiveVector[GpiAdaptiveVector[T1]],
+                                             u: GpiAdaptiveVector[GpiAdaptiveVector[T2]],
+                                             stats: Option[GpiAdaptiveVector.Stat] = None)
+    : GpiAdaptiveVector[GpiAdaptiveVector[T4]] = { // : GpiAdaptiveVector[Any] = { //
     val defdstats = stats.isEmpty
     val activeStats =
       if (stats.isDefined) stats.get else GpiAdaptiveVector.Stat.Stat()
     val t0 = System.nanoTime()
-    val avOfsparseValueT4Opt =
-      if (sparseValueT4Opt.isDefined) {
-        Option(GpiAdaptiveVector.fillWithSparse[T4](a.size)(sparseValueT4Opt.get))
-      } else { None }
-    val nrow = u.size
-    val ncol = a.size
-    val sparseValueT40 = sparseValueT4Opt.getOrElse(zero)
-    val rMM = MMap[Int, GpiAdaptiveVector[T4]]()
-    val rvIter = u.denseIterator
-    for (rv <- rvIter) { // 3
-      val cMM = MMap[Int, T4]()
-      val cvIter = a.denseIterator
-      for (cv <- cvIter) { // 4
-        val v = gpi_innerp(
-          f,
-          g,
-          c,
-          zero,
-          rv._2, // 3
-          cv._2, // 4
-          sparseValueT3Opt)
-        if (v != sparseValueT40) cMM(cv._1) = v
-      }
-      rMM(rv._1) = GpiAdaptiveVector.fromMap(cMM.toMap, sparseValueT40, ncol, a.threshold)
+    val res: GpiAdaptiveVector[GpiAdaptiveVector[T4]] = gpi_map(
+      gpi_m_times_v(f,
+                    g,
+                    c,
+                    zero,
+                    a,
+                    _: GpiAdaptiveVector[T2],
+                    Option(activeStats)),
+      u,
+      Option(activeStats)
+    )
+    val t1 = System.nanoTime()
+    val t01 = LagUtils.tt(t0, t1)
+    val utype = u match {
+      case _: GpiSparseVector[_] => "sparse"
+      case _: GpiDenseVector[_] => "dense"
     }
-    val er = GpiAdaptiveVector.fillWithSparse(ncol)(sparseValueT40)
-    GpiAdaptiveVector.fromMap(rMM.toMap, er, nrow, a.threshold)
+    val vtype = res match {
+      case _: GpiSparseVector[_] => "sparse"
+      case _: GpiDenseVector[_] => "dense"
+    }
+    // c    println("GpiOps: gpi_m_times_m: complete: >%s< -> >%s<: time: >%.3f< s, %s"
+    //        .format(utype, vtype, t01, activeStats))
+    res
+
   }
   def gpi_equiv[T: ClassTag](u: GpiAdaptiveVector[T], v: GpiAdaptiveVector[T]): Boolean = {
     GpiAdaptiveVector.gpi_equiv(u, v)

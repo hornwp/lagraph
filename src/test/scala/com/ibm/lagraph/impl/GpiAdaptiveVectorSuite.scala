@@ -258,21 +258,21 @@ class GpiAdaptiveVectorSuite extends FunSuite with Matchers {
 
   test("gpimap") {
     val fm1 = (x: Int) => x * 2
-    val mv1 = GpiAdaptiveVector.gpi_map(fm1, v1Dense, sparseValue)
+    val mv1 = GpiAdaptiveVector.gpi_map(fm1, v1Dense)
     if (DEBUG) println("GpiDenseVector(GpiBuffer(0,2,4,6,8,10,12,14,16,18),0,9)", mv1)
     val mv1e = List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
     GpiAdaptiveVectorSuite.checkDenseVector(mv1, v1Dense.length, sparseValue, 9, mv1e)
-    val mv2 = GpiAdaptiveVector.gpi_map(fm1, v2Sparse, sparseValue)
+    val mv2 = GpiAdaptiveVector.gpi_map(fm1, v2Sparse)
     if (DEBUG) println("GpiSparseVector((GpiBuffer(2),GpiBuffer(2)),0,10)", mv2)
     val mv2e = (List(2), List(2))
     GpiAdaptiveVectorSuite.checkSparseVector(mv2, v2Sparse.length, sparseValue, 1, mv2e)
     val fm2 = (x: Int) => x * 0
-    val mv3 = GpiAdaptiveVector.gpi_map(fm2, v1Dense, sparseValue)
+    val mv3 = GpiAdaptiveVector.gpi_map(fm2, v1Dense)
     if (DEBUG) println("GpiSparseVector((GpiBuffer(),GpiBuffer()),0,10)", mv3)
     val mv3e = (List(), List())
     GpiAdaptiveVectorSuite.checkSparseVector(mv3, v2Sparse.length, sparseValue, 0, mv3e)
     val fm3 = (x: Int) => x * 2 + 1
-    val mv4 = GpiAdaptiveVector.gpi_map(fm3, v2Sparse, sparseValue)
+    val mv4 = GpiAdaptiveVector.gpi_map(fm3, v2Sparse)
     if (DEBUG) println("GpiDenseVector(GpiBuffer(1,1,3,1,1,1,1,1,1,1),0,10)", mv4)
     val mv4e = List(1, 1, 3, 1, 1, 1, 1, 1, 1, 1)
     GpiAdaptiveVectorSuite.checkDenseVector(mv1, v1Dense.length, sparseValue, 9, mv4e)
@@ -510,11 +510,11 @@ class GpiAdaptiveVectorSuite extends FunSuite with Matchers {
         x * 2
       }
     }
-    val mv1 = GpiAdaptiveVector.gpi_map(Fm1, v1Dense, sparseValue)
+    val mv1 = GpiAdaptiveVector.gpi_map(Fm1, v1Dense)
     if (DEBUG) println("GpiDenseVector(GpiBuffer(0,2,4,6,8,10,12,14,16,18),0,9)", mv1)
     val mv1e = List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
     GpiAdaptiveVectorSuite.checkDenseVector(mv1, v1Dense.length, sparseValue, 9, mv1e)
-    val mv2 = GpiAdaptiveVector.gpi_map(Fm1, v2Sparse, sparseValue)
+    val mv2 = GpiAdaptiveVector.gpi_map(Fm1, v2Sparse)
     if (DEBUG) println("GpiSparseVector((GpiBuffer(2),GpiBuffer(2)),0,10)", mv2)
     val mv2e = (List(2), List(2))
     GpiAdaptiveVectorSuite.checkSparseVector(mv2, v2Sparse.length, sparseValue, 1, mv2e)
@@ -523,7 +523,7 @@ class GpiAdaptiveVectorSuite extends FunSuite with Matchers {
         x * 0
       }
     }
-    val mv3 = GpiAdaptiveVector.gpi_map(Fm2, v1Dense, sparseValue)
+    val mv3 = GpiAdaptiveVector.gpi_map(Fm2, v1Dense)
     if (DEBUG) println("GpiSparseVector((GpiBuffer(),GpiBuffer()),0,10)", mv3)
     val mv3e = (List(), List())
     GpiAdaptiveVectorSuite.checkSparseVector(mv3, v2Sparse.length, sparseValue, 0, mv3e)
@@ -532,7 +532,7 @@ class GpiAdaptiveVectorSuite extends FunSuite with Matchers {
         x * 2 + 1
       }
     }
-    val mv4 = GpiAdaptiveVector.gpi_map(Fm3, v2Sparse, sparseValue)
+    val mv4 = GpiAdaptiveVector.gpi_map(Fm3, v2Sparse)
     if (DEBUG) println("GpiDenseVector(GpiBuffer(1,1,3,1,1,1,1,1,1,1),0,10)", mv4)
     val mv4e = List(1, 1, 3, 1, 1, 1, 1, 1, 1, 1)
     GpiAdaptiveVectorSuite.checkDenseVector(mv1, v1Dense.length, sparseValue, 9, mv4e)

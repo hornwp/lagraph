@@ -155,7 +155,7 @@ final case class GpiDstrVectorBlocker(val nrow: Long,
 // ********
 case class GpiBvec[VS: ClassTag](val u: GpiAdaptiveVector[VS]) {
   def add(f: (VS, VS) => VS, a: GpiBvec[VS]): GpiBvec[VS] = {
-    GpiBvec(GpiOps.gpi_zip(f, u, a.u, None, Option(u.threshold)))
+    GpiBvec(GpiOps.gpi_zip(f, u, a.u))
   }
   def reduce[T2: ClassTag](f: (VS, T2) => T2, c: (T2, T2) => T2, zero: T2): T2 = {
     GpiOps.gpi_reduce(f, c, zero, u)
@@ -729,7 +729,7 @@ class GpiDstr(val nblockRequested: Int, DEBUG: Boolean = false)
 
       val sparseValueT2 = sparseValueT2Opt.getOrElse(f(u.sparseValue))
       // x      val mr = LagUtils.timeblock(..., "gpi_map: ")
-      val mr = GpiOps.gpi_map[T1, T2](f, bvec.u, Option(sparseValueT2), Option(bvec.u.threshold))
+      val mr = GpiOps.gpi_map[T1, T2](f, bvec.u)
       GpiBvec(mr)
     }
     val sparseValueT2 = sparseValueT2Opt.getOrElse(f(u.sparseValue))
@@ -779,7 +779,7 @@ class GpiDstr(val nblockRequested: Int, DEBUG: Boolean = false)
       val va = iterableVoV.head.u
       // x val wa = LagUtils.timeblock(GpiOps.gpi_zip(
       //   f, ua, va, sparseValueT3Opt, Option(ua.threshold)), "gpi_zip")
-      val wa = GpiOps.gpi_zip(f, ua, va, sparseValueT3Opt, Option(ua.threshold))
+      val wa = GpiOps.gpi_zip(f, ua, va)
       //      // SPARSE
       //      if (wa.denseCount == 0) (indx, GpiBvec(
       //        GpiAdaptiveVector.fillWithSparse[T3](stride)

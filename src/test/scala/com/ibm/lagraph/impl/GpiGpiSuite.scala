@@ -97,12 +97,10 @@ class GpiGpiSuite extends FunSuite with Matchers {
   }
 
   test("GpiOps.gpimap") {
-    //    val u = GpiOps.gpi_replicate(size, x, sparseValue)
     val u = GpiOps.gpi_replicate(5, 1)
     def f(vs: Int): Double = { vs.toDouble * 2.0 }
-    //    val m = u.gpimap(f, 0.0)
-    val m = GpiOps.gpi_map(f, u, Option(0.0))
-    assert(GpiGpiSuite.getVectorType(m) == "DenseVector")
+    val m = GpiOps.gpi_map(f, u)
+    assert(GpiGpiSuite.getVectorType(m) == "SparseVector")
     val mm = Vector(2.0, 2.0, 2.0, 2.0, 2.0)
     assert(mm.corresponds(m.toVector)(_ == _))
   }
@@ -127,7 +125,7 @@ class GpiGpiSuite extends FunSuite with Matchers {
     val v = GpiAdaptiveVector.fromSeq(Range(0, 3).toVector, 0)
     def f(x: Int, y: Int): Int = { x + y }
     def g(x: Int, y: Int): Int = { x * y }
-    val u = GpiOps.gpi_m_times_v(f, g, f, 0, m, v, Option(0), Option(0))
+    val u = GpiOps.gpi_m_times_v(f, g, f, 0, m, v)
     val ua = Vector(15, 18, 21)
     assert(ua.corresponds(u.toVector)(_ == _))
   }
@@ -184,7 +182,7 @@ class GpiGpiSuite extends FunSuite with Matchers {
 
           // the gpi result
           // start w/ transpose end up w/ transpose
-          val gpiC = GpiOps.gpi_m_times_m(f, g, f, 0L, gpiA, gpiBt, Option(0L), Option(0L))
+          val gpiC = GpiOps.gpi_m_times_m(f, g, f, 0L, gpiA, gpiBt)
           //            if (DEBUG) {
           //              println("gpiC")
           //              println(gpiC)

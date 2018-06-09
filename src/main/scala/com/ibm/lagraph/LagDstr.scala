@@ -715,9 +715,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
                                                  sr.addition,
                                                  sr.zero,
                                                  cAa,
-                                                 xxx,
-                                                 Option(vsSparse),
-                                                 Option(vsSparse))
+                                                 xxx)
 
           ((r, c), blockResult)
         }
@@ -796,7 +794,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
           def f(kv1: ((Int, Int), GpiAdaptiveVector[T]),
                 kv2: ((Int, Int), GpiAdaptiveVector[T])) = {
             val result =
-              GpiOps.gpi_zip(sr.addition, kv1._2, kv2._2, Option(sr.zero))
+              GpiOps.gpi_zip(sr.addition, kv1._2, kv2._2)
             (kv1._1, result)
           }
           //        println("XXXX: PART:",partition)
@@ -899,9 +897,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
                                                 sr.addition,
                                                 sr.zero,
                                                 cAa,
-                                                cBa,
-                                                Option(msSparse),
-                                                Option(msSparse))
+                                                cBa)
             val updatedPartial = GpiOps.gpi_zip(
               GpiOps.gpi_zip(sr.addition, _: GpiAdaptiveVector[T], _: GpiAdaptiveVector[T]),
               iPartial,

@@ -1583,7 +1583,7 @@ object TestMain {
 
           // the gpi result
           // start w/ transpose end up w/ transpose
-          val gpiC = GpiOps.gpi_m_times_m(f, g, f, 0L, gpiA, gpiBt, Option(0L), Option(0L))
+          val gpiC = GpiOps.gpi_m_times_m(f, g, f, 0L, gpiA, gpiBt)
           //            if (DEBUG) {
           //              println("gpiC")
           //              println(gpiC)
