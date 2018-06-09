@@ -425,7 +425,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
     case ua: LagDstrVector[_] =>
       // TODO use buildin
       LagDstrVector(this, dstr.dstr_zip(f, ua.dstrBvec,
-                    dstr.dstr_indices(sc, ua.size, 0L), sparseValueOpt))
+                    dstr.dstr_indices(sc, ua.size, 0L)))
     //      LagDstrVector(dstr.dstr_zip(f, ua.dstrBvec, dstr.dstr_indices(sc, 0, u.size)))
   }
   // TODO needs to be optimized

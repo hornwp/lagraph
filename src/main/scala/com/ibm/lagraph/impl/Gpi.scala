@@ -453,7 +453,7 @@ class GpiDstr(val nblockRequested: Int, DEBUG: Boolean = false)
 
         List(l).toIterator
       } else {
-        // SPARSE
+        // block is sparse
         val l = Tuple2(Tuple2(r, c), GpiBmat(mSparse))
         List(l).toIterator
       }
@@ -723,21 +723,17 @@ class GpiDstr(val nblockRequested: Int, DEBUG: Boolean = false)
     *
     */
   def dstr_map[T1: ClassTag, T2: ClassTag](f: (T1) => T2,
-                                           u: GpiDstrBvec[T1],
-                                           sparseValueT2Opt: Option[T2] = None): GpiDstrBvec[T2] = {
+                                           u: GpiDstrBvec[T1]): GpiDstrBvec[T2] = {
     def fv(bvec: GpiBvec[T1]): GpiBvec[T2] = {
-
-      val sparseValueT2 = sparseValueT2Opt.getOrElse(f(u.sparseValue))
-      // x      val mr = LagUtils.timeblock(..., "gpi_map: ")
       val mr = GpiOps.gpi_map[T1, T2](f, bvec.u)
       GpiBvec(mr)
     }
-    val sparseValueT2 = sparseValueT2Opt.getOrElse(f(u.sparseValue))
     val mappedDVV = u.vecRdd
       .mapValues(fv)
       .partitionBy(new GpiBlockVectorPartitioner(u.blocker.clipN + 1,
                                                  u.blocker.vecClipN + 1,
                                                  u.blocker.remClipN + 1))
+    val sparseValueT2 = f(u.sparseValue)
     GpiDstrBvec(this, u.blocker, mappedDVV, sparseValueT2)
   }
 
@@ -756,8 +752,7 @@ class GpiDstr(val nblockRequested: Int, DEBUG: Boolean = false)
   def dstr_zip[T1: ClassTag, T2: ClassTag, T3: ClassTag](
       f: (T1, T2) => T3,
       u: GpiDstrBvec[T1],
-      v: GpiDstrBvec[T2],
-      sparseValueT3Opt: Option[T3] = None): GpiDstrBvec[T3] = {
+      v: GpiDstrBvec[T2]): GpiDstrBvec[T3] = {
     val uVecRdd = u.vecRdd
     val unrow = u.nrow
     val vVecRdd = v.vecRdd
@@ -766,8 +761,6 @@ class GpiDstr(val nblockRequested: Int, DEBUG: Boolean = false)
     val nrow = unrow
     val a_dstr_zip = uVecRdd.cogroup(vVecRdd)
     a_dstr_zip.setName("a_dstr_zip")
-    val sparseValueT3 =
-      sparseValueT3Opt.getOrElse(f(u.sparseValue, v.sparseValue))
     def fco(input: (Iterable[GpiBvec[T1]], Iterable[GpiBvec[T2]])): GpiBvec[T3] = {
       val iterableUoV = input._1
       require(iterableUoV.size < 2)
@@ -777,18 +770,12 @@ class GpiDstr(val nblockRequested: Int, DEBUG: Boolean = false)
       require(iterableVoV.size > 0)
       val ua = iterableUoV.head.u
       val va = iterableVoV.head.u
-      // x val wa = LagUtils.timeblock(GpiOps.gpi_zip(
-      //   f, ua, va, sparseValueT3Opt, Option(ua.threshold)), "gpi_zip")
       val wa = GpiOps.gpi_zip(f, ua, va)
-      //      // SPARSE
-      //      if (wa.denseCount == 0) (indx, GpiBvec(
-      //        GpiAdaptiveVector.fillWithSparse[T3](stride)
-      //        (sparseValueT3))) else (indx, GpiBvec(wa))
       GpiBvec(wa)
     }
     val a_dstr_zip_map = a_dstr_zip.mapValues(fco)
     a_dstr_zip_map.setName("a_dstr_zip_map")
-    //    println("SSSSSSSS: dstr_zip: sparseValueT3: >%s<".format(sparseValueT3))
+    val sparseValueT3 = f(u.sparseValue, v.sparseValue)
     GpiDstrBvec(this, u.blocker, a_dstr_zip_map, sparseValueT3)
   }
 
@@ -817,9 +804,8 @@ class GpiDstr(val nblockRequested: Int, DEBUG: Boolean = false)
       g: (T1, T2) => T3,
       zero: T4,
       u: GpiDstrBvec[T1],
-      v: GpiDstrBvec[T2],
-      sparseValueT3Opt: Option[T3] = None): T4 = {
-    dstr_reduce(f, c, zero, dstr_zip(g, u, v, sparseValueT3Opt))
+      v: GpiDstrBvec[T2]): T4 = {
+    dstr_reduce(f, c, zero, dstr_zip(g, u, v))
   }
   // ******
   def dstr_equiv[T: ClassTag](u: GpiDstrBvec[T], v: GpiDstrBvec[T]): Boolean = {
