@@ -393,9 +393,155 @@ object GpiOps {
     // c    println("GpiOps: gpi_m_times_m: complete: >%s< -> >%s<: time: >%.3f< s, %s"
     //        .format(utype, vtype, t01, activeStats))
 //    res
-    val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero)
-    val mSparse = GpiAdaptiveVector.fillWithSparse(u.size)(vSparse)
-    mSparse
+    
+    val atype = a match {
+      case _: GpiSparseVector[_] => "sparse"
+      case _: GpiDenseVector[_] => "dense"
+    }
+    val utype = u match {
+      case _: GpiSparseVector[_] => "sparse"
+      case _: GpiDenseVector[_] => "dense"
+    }
+    
+    println("atype: >%s<, utype: >%s<".format(atype, utype))
+    val result = u match {
+      case ua: GpiSparseVector[GpiAdaptiveVector[T2]] => {
+        val rv = ua.rv
+//        val sparseValueT1 = a.sparseValue.sparseValue
+//        val sparseValueT2 = sparseValue.sparseValue
+//        val sparseValueT3 = g(sparseValueT2, sparseValueT1)
+        
+        val len = rv._1.length
+        val rs = Array.ofDim[Int](len)
+//        val vs = Array.ofDim[B](len)
+        val vs = Array.ofDim[GpiAdaptiveVector[T4]](len)
+        var i = 0
+        var j = 0
+        val k = len
+        while (i < k) {
+          vs(j) = gpi_m_times_v(f,
+                                g,
+                                c,
+                                zero,
+                                a,
+                                rv._2(i): GpiAdaptiveVector[T2],
+                                Option(activeStats))
+//          vs(j) = f(rv._2(i))
+          if (vs(j) != ua.sparseValue) {
+            rs(j) = rv._1(i)
+            j += 1
+          }
+          i += 1
+        }
+        val t1 = System.nanoTime()
+        val t01 = LagUtils.tt(t0, t1)
+        // x    println("GpiBuffer: gpiMapSparseBuffersToSparseBuffers: time: >%.3f< s".format(t01))
+        val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero) // TODO zero mayb wrong
+        val bi = GpiBuffer(rs, j)
+        val bv = GpiBuffer(vs, j)
+        val t = ua.threshold
+        GpiSparseVector((bi, bv), vSparse, ua.size, ua.threshold)
+//        "sparse"
+      }
+      case ua: GpiDenseVector[GpiAdaptiveVector[T2]] => {
+      //  def gpiMapDenseBufferToDenseBuffer[@spec(Int) A: ClassTag, @spec(Int) B](
+//      dbs: GpiBuffer[A],
+//      sparseValue: B,
+//      f: A => B): (GpiBuffer[B], Int, Int) = {
+    //    f: A => B)(implicit eA: ClassTag[A],  eB:ClassTag[B]): (GpiBuffer[B], Int, Int) = {
+//    val xA = classTag[A]
+//    val xB = classTag[B]
+//    val t0 = System.nanoTime()
+//    val bs = Array.ofDim[B](dbs.length)
+        val dbs = ua.iseq
+        val sparseValue = ua.sparseValue
+        val bs = Array.ofDim[GpiAdaptiveVector[T4]](dbs.length)
+    var i = 0
+    val k = dbs.length
+    var newDenseCount = 0
+    while (i < k) {
+          bs(i) = gpi_m_times_v(f,
+                                g,
+                                c,
+                                zero,
+                                a,
+                                dbs(i): GpiAdaptiveVector[T2],
+                                Option(activeStats))
+//      bs(i) = f(dbs(i))
+      if (bs(i) != sparseValue) newDenseCount += 1
+      i += 1
+    }
+    val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero) // TODO zero mayb wrong
+    GpiDenseVector(GpiBuffer(bs), vSparse, newDenseCount, ua.threshold)
+//    (GpiBuffer(bs), newDenseCount, k)
+//        "dense"
+      }
+    }
+//  def gpiMapDenseBufferToDenseBuffer[@spec(Int) A: ClassTag, @spec(Int) B: ClassTag](
+//      //  def gpiMapDenseBufferToDenseBuffer[@spec(Int) A: ClassTag, @spec(Int) B](
+//      dbs: GpiBuffer[A],
+//      sparseValue: B,
+//      f: A => B): (GpiBuffer[B], Int, Int) = {
+//    //    f: A => B)(implicit eA: ClassTag[A],  eB:ClassTag[B]): (GpiBuffer[B], Int, Int) = {
+//    val xA = classTag[A]
+//    val xB = classTag[B]
+//    val t0 = System.nanoTime()
+//    val bs = Array.ofDim[B](dbs.length)
+//    var i = 0
+//    val k = dbs.length
+//    var newDenseCount = 0
+//    val ta = System.nanoTime()
+//    val t0a = LagUtils.tt(t0, ta)
+//    var xMax = 0.0
+//    var xMin = 9999999.0
+//    while (i < k) {
+//      val xt0 = System.nanoTime()
+//      bs(i) = f(dbs(i))
+//      if (bs(i) != sparseValue) newDenseCount += 1
+//      i += 1
+//      val xt1 = System.nanoTime()
+//      val xt01 = LagUtils.tt(xt0, xt1)
+//      if (xt01 > xMax) xMax = xt01
+//      if (xt01 < xMin) xMin = xt01
+//    }
+//    // x    println("    GpiBuffer:
+//    //      gpiMapDenseBufferToDenseBuffer: t0a: >%.3f<, k: >%d<, newDenseCount: >%d<, A:>%s<,
+//    //      B:>%s<, xMin: >%.6f<, xMax: >%.6f<".format(t0a, k, newDenseCount, xA, xB, xMin, xMax))
+//    val t1 = System.nanoTime()
+//    val t01 = LagUtils.tt(t0, t1)
+//    // x    println("GpiBuffer: gpiMapDenseBufferToDenseBuffer: time: >%.3f< s".format(t01))
+//    (GpiBuffer(bs), newDenseCount, k)
+//  }
+
+//  def gpiMapSparseBuffersToSparseBuffers[@spec(Int) A: ClassTag, @spec(Int) B: ClassTag](
+//      rv: (GpiBuffer[Int], GpiBuffer[A]),
+//      sparseValue: B,
+//      f: A => B): (GpiBuffer[Int], GpiBuffer[B], Int) = {
+//    val t0 = System.nanoTime()
+//    val len = rv._1.length
+//    val rs = Array.ofDim[Int](len)
+//    val vs = Array.ofDim[B](len)
+//    var i = 0
+//    var j = 0
+//    val k = len
+//    while (i < k) {
+//      vs(j) = f(rv._2(i))
+//      if (vs(j) != sparseValue) {
+//        rs(j) = rv._1(i)
+//        j += 1
+//      }
+//      i += 1
+//    }
+//    val t1 = System.nanoTime()
+//    val t01 = LagUtils.tt(t0, t1)
+//    // x    println("GpiBuffer: gpiMapSparseBuffersToSparseBuffers: time: >%.3f< s".format(t01))
+//    (GpiBuffer(rs, j), GpiBuffer(vs, j), k)
+//  }
+
+//    val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero)
+//    val mSparse = GpiAdaptiveVector.fillWithSparse(u.size)(vSparse)
+//    mSparse
+    result
 
   }
   def gpi_equiv[T: ClassTag](u: GpiAdaptiveVector[T], v: GpiAdaptiveVector[T]): Boolean = {
