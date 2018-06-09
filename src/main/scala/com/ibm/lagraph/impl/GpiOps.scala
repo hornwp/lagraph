@@ -394,7 +394,7 @@ object GpiOps {
     //        .format(utype, vtype, t01, activeStats))
 //    res
     val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero)
-    val mSparse = GpiAdaptiveVector.fillWithSparse(u(0).size)(vSparse)
+    val mSparse = GpiAdaptiveVector.fillWithSparse(u.size)(vSparse)
     mSparse
 
   }
