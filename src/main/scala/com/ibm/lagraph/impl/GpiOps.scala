@@ -302,6 +302,67 @@ object GpiOps {
       a: GpiAdaptiveVector[GpiAdaptiveVector[T1]],
       u: GpiAdaptiveVector[T2],
       stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T4] = {
+    val result = a match {
+      case aa: GpiSparseVector[GpiAdaptiveVector[T1]] => {
+        val rv = aa.rv
+        
+        val len = rv._1.length
+        val rs = Array.ofDim[Int](len)
+        val vs = Array.ofDim[T4](len)
+        var i = 0
+        var j = 0
+        val k = len
+        while (i < k) {
+          vs(j) = gpi_innerp(f,
+                             g,
+                             c,
+                             zero,
+                             u,
+                             rv._2(i): GpiAdaptiveVector[T1],
+                             stats)
+          if (vs(j) != aa.sparseValue) {
+            rs(j) = rv._1(i)
+            j += 1
+          }
+          i += 1
+        }
+        val bi = GpiBuffer(rs, j)
+        val bv = GpiBuffer(vs, j)
+        GpiSparseVector((bi, bv), zero, aa.size, aa.threshold)
+      }
+      case aa: GpiDenseVector[GpiAdaptiveVector[T1]] => {
+        val dbs = aa.iseq
+        val bs = Array.ofDim[T4](dbs.length)
+        var i = 0
+        val k = dbs.length
+        var newDenseCount = 0
+        while (i < k) {
+          bs(i) = gpi_innerp(f,
+                                g,
+                                c,
+                                zero,
+                                u,
+                                dbs(i): GpiAdaptiveVector[T1],
+                                stats)
+          if (bs(i) != aa.sparseValue) newDenseCount += 1
+          i += 1
+        }
+        GpiDenseVector(GpiBuffer(bs), zero, newDenseCount, aa.threshold)
+      }
+    }
+    result
+  }
+  def gpi_m_times_v_old[@spec(Int) T1: ClassTag,
+                    @spec(Int) T2: ClassTag,
+                    @spec(Int) T3: ClassTag,
+                    @spec(Int) T4: ClassTag](
+      f: (T3, T4) => T4,
+      g: (T2, T1) => T3,
+      c: (T4, T4) => T4,
+      zero: T4,
+      a: GpiAdaptiveVector[GpiAdaptiveVector[T1]],
+      u: GpiAdaptiveVector[T2],
+      stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T4] = {
     val innerpThreshold = u.threshold
     val mapThreshold = a.threshold
     val defdstats = stats.isEmpty
@@ -547,6 +608,57 @@ object GpiOps {
 //    mSparse
     result
 
+  }
+  def gpi_m_times_m_old[@spec(Int) T1: ClassTag,
+                    @spec(Int) T2: ClassTag,
+                    @spec(Int) T3: ClassTag,
+                    @spec(Int) T4: ClassTag](f: (T3, T4) => T4,
+                                             g: (T2, T1) => T3,
+                                             c: (T4, T4) => T4,
+                                             zero: T4,
+                                             a: GpiAdaptiveVector[GpiAdaptiveVector[T1]],
+                                             u: GpiAdaptiveVector[GpiAdaptiveVector[T2]],
+                                             stats: Option[GpiAdaptiveVector.Stat] = None)
+    : GpiAdaptiveVector[GpiAdaptiveVector[T4]] = { // : GpiAdaptiveVector[Any] = { //
+    val defdstats = stats.isEmpty
+    val activeStats =
+      if (stats.isDefined) stats.get else GpiAdaptiveVector.Stat.Stat()
+    val t0 = System.nanoTime()
+    val res: GpiAdaptiveVector[GpiAdaptiveVector[T4]] = gpi_map(
+      gpi_m_times_v(f,
+                    g,
+                    c,
+                    zero,
+                    a,
+                    _: GpiAdaptiveVector[T2],
+                    Option(activeStats)),
+      u,
+      Option(activeStats)
+    )
+    //    val t1 = System.nanoTime()
+    //    val t01 = LagUtils.tt(t0, t1)
+    //    val utype = u match {
+    //      case _: GpiSparseVector[_] => "sparse"
+    //      case _: GpiDenseVector[_] => "dense"
+    //    }
+    //    val vtype = res match {
+    //      case _: GpiSparseVector[_] => "sparse"
+    //      case _: GpiDenseVector[_] => "dense"
+    //    }
+    // c    println("GpiOps: gpi_m_times_m: complete: >%s< -> >%s<: time: >%.3f< s, %s"
+    //        .format(utype, vtype, t01, activeStats))
+    
+//    val atype = a match {
+//      case _: GpiSparseVector[_] => "sparse"
+//      case _: GpiDenseVector[_] => "dense"
+//    }
+//    val utype = u match {
+//      case _: GpiSparseVector[_] => "sparse"
+//      case _: GpiDenseVector[_] => "dense"
+//    }
+//    
+//    println("atype: >%s<, utype: >%s<".format(atype, utype))
+    res
   }
   def gpi_equiv[T: ClassTag](u: GpiAdaptiveVector[T], v: GpiAdaptiveVector[T]): Boolean = {
     GpiAdaptiveVector.gpi_equiv(u, v)
