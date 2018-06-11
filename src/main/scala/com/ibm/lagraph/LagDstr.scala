@@ -898,10 +898,11 @@ final case class LagDstrContext(@transient sc: SparkContext,
                                                 sr.zero,
                                                 cAa,
                                                 cBa)
-            val updatedPartial = GpiOps.gpi_zip(
-              GpiOps.gpi_zip(sr.addition, _: GpiAdaptiveVector[T], _: GpiAdaptiveVector[T]),
-              iPartial,
-              cPartial)
+            val updatedPartial = cPartial
+//            val updatedPartial = GpiOps.gpi_zip(
+//              GpiOps.gpi_zip(sr.addition, _: GpiAdaptiveVector[T], _: GpiAdaptiveVector[T]),
+//              iPartial,
+//              cPartial)
             ((r, c), updatedPartial)
           }
           val nextPartial = rPartial.cogroup(sra, srb).map(calculate)
