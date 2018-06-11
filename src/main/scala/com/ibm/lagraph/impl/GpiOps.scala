@@ -313,17 +313,17 @@ object GpiOps {
         var j = 0
         val k = len
         while (i < k) {
-          vs(j) = gpi_innerp(f,
-                             g,
-                             c,
-                             zero,
-                             u,
-                             rv._2(i): GpiAdaptiveVector[T1],
-                             stats)
-          if (vs(j) != aa.sparseValue) {
-            rs(j) = rv._1(i)
-            j += 1
-          }
+//          vs(j) = gpi_innerp(f,
+//                             g,
+//                             c,
+//                             zero,
+//                             u,
+//                             rv._2(i): GpiAdaptiveVector[T1],
+//                             stats)
+//          if (vs(j) != aa.sparseValue) {
+//            rs(j) = rv._1(i)
+//            j += 1
+//          }
           i += 1
         }
         val bi = GpiBuffer(rs, j)
