@@ -40,9 +40,9 @@ object TestMain {
       yield row zip col map Function.tupled(_ * _) reduceLeft (_ + _)
   }
   def vToMrow[A](
-    m:    Vector[Vector[A]],
-    mask: Vector[Boolean],
-    v:    Vector[A])(implicit n: Numeric[A]): Vector[Vector[A]] = {
+      m: Vector[Vector[A]],
+      mask: Vector[Boolean],
+      v: Vector[A])(implicit n: Numeric[A]): Vector[Vector[A]] = {
     import n._
     for (row <- m zip mask)
       yield if (row._2) v else row._1
@@ -254,10 +254,13 @@ object TestMain {
     println("pi_initial: >\n%s<".format(hc.vToString(pi_initial, long2Str)))
 
     def iterate(
-      weight: Float,
-      d:      LagVector[PrimSemiringType],
-      s:      LagVector[Float],
-      pi:     LagVector[Long]): (Float, LagVector[PrimSemiringType], LagVector[Float], LagVector[Long]) =
+        weight: Float,
+        d: LagVector[PrimSemiringType],
+        s: LagVector[Float],
+        pi: LagVector[Long]): (Float,
+                               LagVector[PrimSemiringType],
+                               LagVector[Float],
+                               LagVector[Long]) =
       if (hc.vEquiv(s, s_final_test)) {
         println("DONE")
         println("s: >\n%s<".format(hc.vToString(s, float2Str)))
@@ -459,10 +462,13 @@ object TestMain {
     val pi_initial = hc.vReplicate(numv, NodeNil)
 
     def iterate(
-      weight: Float,
-      d:      LagVector[PrimSemiringType],
-      s:      LagVector[Float],
-      pi:     LagVector[Long]): (Float, LagVector[PrimSemiringType], LagVector[Float], LagVector[Long]) =
+        weight: Float,
+        d: LagVector[PrimSemiringType],
+        s: LagVector[Float],
+        pi: LagVector[Long]): (Float,
+                               LagVector[PrimSemiringType],
+                               LagVector[Float],
+                               LagVector[Long]) =
       if (hc.vEquiv(s, s_final_test)) (weight, d, s, pi)
       else {
         println("  iterate ****************************************")
@@ -1287,7 +1293,7 @@ object TestMain {
     // read and initialize adjacency matrix
     val fspecAdj = root + file + "_adj.tsv"
     val rcRddAdj = LagUtils.fileToRcRdd(sc, fspecAdj)
-    val numv = LagUtils.rcMaxIndex(rcRddAdj)
+    val numv = LagUtils.rcMaxColIndex(rcRddAdj)
     val A = rcRddAdj.map { e => ((e._1, e._2), LongOne) }
 
     // read and initialize incidence matrix
@@ -1639,7 +1645,7 @@ object TestMain {
       if (DEBUG) println("r: >%s<".format(r))
       val re = (List(2, 7, 9), List(1, 2, 1))
     }
-    
+
     if (true) {
       val v2Sparse =
         GpiAdaptiveVector.fromSeq(Vector(0, 0, 1, 0, 0, 0, 0, 1, 0, 0), sparseValue)
@@ -1665,7 +1671,7 @@ object TestMain {
     //    TestMain.LagDstrContext_vZipWithIndexV3(sc)
     //    TestMain.LagDstrContext_vZipWithIndexSparseV3(sc)
     //    TestMain.LagDstrContext_mZipWithIndexSparseV3(sc)
-    //    TestMain.LagDstrContext_mTmV3(sc)
+        TestMain.LagDstrContext_mTmV3(sc)
     //    TestMain.LagDstrContext_mTvV3(sc)
     //    TestMain.LagDstrContext_vToMrowV3(sc)
     //    TestMain.LagDstrContext_transposeV3(sc)
@@ -1674,7 +1680,7 @@ object TestMain {
     //    TestMain.LagDstrContext_samsi2017static_algo1_tricnt(sc)
     //    TestMain.LagDstrContext_samsi2017static_algo2_tricnt(sc)
     //    TestMain.GpiOps_gpi_m_times_m()
-    TestMain.gpizip_sradd_etc()
+    //    TestMain.gpizip_sradd_etc()
   }
 }
 // scalastyle:on println

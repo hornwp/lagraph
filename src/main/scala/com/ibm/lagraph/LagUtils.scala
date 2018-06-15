@@ -243,24 +243,43 @@ object LagUtils {
   }
 
   /**
-   * Given an rcRdd representation of an adjacency matrix find the number of Vertices.
+   * Given an rcRdd representation of a matrix determine the max row index.
    *
-   *  Finds the largest vertex index in an edge and then adds +1L
+   *  Finds the largest row index in the matrix and then adds +1L
    *
    *  @param sc a spark context
-   *  @param rcRdd representation of an adjacency matrix
+   *  @param rcRdd representation of a matrix
    *  @return number of vertices
    */
-  def rcMaxIndex(rcRdd: RDD[(Long, Long)]): Long = {
+  def rcMaxRowIndex(rcRdd: RDD[(Long, Long)]): Long = {
     def findMaxIndex(rcGraph: RDD[(Long, Long)]): Long = {
       val numvEdge = rcGraph.max()(new Ordering[Tuple2[Long, Long]]() {
         override def compare(x: (Long, Long), y: (Long, Long)): Int = {
-          val xm = if (x._1 > x._2) x._1 else x._2
-          val ym = if (y._1 > y._2) y._1 else y._2
-          Ordering[Long].compare(xm, ym)
+          Ordering[Long].compare(x._1, y._1)
         }
       })
-      if (numvEdge._1 > numvEdge._2) numvEdge._1 else numvEdge._2
+      numvEdge._1
+    }
+    findMaxIndex(rcRdd) + 1L
+  }
+
+  /**
+   * Given an rcRdd representation of a matrix determine the max col index.
+   *
+   *  Finds the largest col index in the matrix and then adds +1L
+   *
+   *  @param sc a spark context
+   *  @param rcRdd representation of a matrix
+   *  @return number of vertices
+   */
+  def rcMaxColIndex(rcRdd: RDD[(Long, Long)]): Long = {
+    def findMaxIndex(rcGraph: RDD[(Long, Long)]): Long = {
+      val numvEdge = rcGraph.max()(new Ordering[Tuple2[Long, Long]]() {
+        override def compare(x: (Long, Long), y: (Long, Long)): Int = {
+          Ordering[Long].compare(x._2, y._2)
+        }
+      })
+      numvEdge._2
     }
     findMaxIndex(rcRdd) + 1L
   }

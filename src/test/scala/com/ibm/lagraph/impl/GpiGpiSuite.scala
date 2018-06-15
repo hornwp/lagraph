@@ -18,6 +18,8 @@
  */
 
 package com.ibm.lagraph.impl
+// TODO get rid of printlns
+// scalastyle:off println
 
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
@@ -341,3 +343,4 @@ object GpiGpiSuite {
     }
   }
 }
+// scalastyle:on println

@@ -32,6 +32,12 @@ class GpiBufferSuite extends FunSuite {
   val sparseValueA = 0
   val sparseValueB = 0
   val sparseValueC = 0
+  def srf(x: Int, y: Int): Int = { x + y }
+  def srg(x: Int, y: Int): Int = { x * y }
+  def src(x: Int, y: Int): Int = { x + y }
+  val srz: Int = 0
+
+  // zipDenseDenseToDense
 
   test("zipDenseDense00") {
     val (vR, denseCountResult, ops) =
@@ -50,6 +56,25 @@ class GpiBufferSuite extends FunSuite {
     assert(denseCountResult == 0)
     BufferSuite.checkDense(vR, (0 to 99 toList) zip List.fill(100)(0))
   }
+
+  // zipDenseDenseToDenseReduce
+
+  test("zipDenseDenseReduce00") {
+    val (res, ops) =
+      GpiBuffer.gpiZipDenseDenseToDenseReduce(
+        vA, vA, len, srz, srf, srg, src)
+    assert(res == vA.toArray.zip(vA.toArray).map(x => srg(x._1, x._2)).foldLeft(srz)(srf))
+  }
+  test("zipDenseDenseReduce01") {
+    val dataDenseB = (-1 to -100 by -1).toArray
+    val vB = GpiBuffer(dataDenseB)
+    val (res, ops) =
+      GpiBuffer.gpiZipDenseDenseToDenseReduce(
+        vA, vB, len, srz, srf, srg, src)
+    assert(res == vA.toArray.zip(vB.toArray).map(x => srg(x._1, x._2)).foldLeft(srz)(srf))
+  }
+
+  // zipDenseSparse
 
   test("zipDenseSparse00") {
     val rvSr = Array(0)
@@ -195,6 +220,170 @@ class GpiBufferSuite extends FunSuite {
     BufferSuite.checkSparse((rvRr, rvRv), List((1, 3), (2, 4), (4, 6), (99, 101)))
   }
 
+  // zipDenseSparseReduce
+
+  test("zipDenseSparseReduce00") {
+    val rvSr = Array(0)
+    val rvSv = Array(-1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipDenseSparseToSparseReduce(
+        vA, rvB, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipDenseSparseReduce01") {
+    val rvSr = Array(0)
+    val rvSv = Array(1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipDenseSparseToSparseReduce(
+        vA, rvB, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipDenseSparseReduce02") {
+    val rvSr = Array(1)
+    val rvSv = Array(1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipDenseSparseToSparseReduce(
+        vA, rvB, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipDenseSparseReduce03") {
+    val rvSr = Array(1, 2)
+    val rvSv = Array(1, 1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipDenseSparseToSparseReduce(
+        vA, rvB, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipDenseSparseReduce04") {
+    val rvSr = Array(1, 2, 4)
+    val rvSv = Array(1, 1, 1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipDenseSparseToSparseReduce(
+        vA, rvB, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipDenseSparseReduce05") {
+    val rvSr = Array(1, 2, 4, 98)
+    val rvSv = Array(1, 1, 1, 1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipDenseSparseToSparseReduce(
+        vA, rvB, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipDenseSparseReduce06") {
+    val rvSr = Array(1, 2, 4, 97, 99)
+    val rvSv = Array(1, 1, 1, 1, 1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipDenseSparseToSparseReduce(
+        vA, rvB, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipDenseSparseReduce down") {
+    val rvSr = Array(1, 2, 4, 97, 99)
+    val rvSv = Array(1, 1, 1, -98, 1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipDenseSparseToSparseReduce(
+        vA, rvB, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  // zipSparseDenseReduce
+
+  test("zipSparseDenseReduce00") {
+    val rvSr = Array(0)
+    val rvSv = Array(-1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseDenseToSparseReduce(
+        rvB, vA, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipSparseDenseReduce01") {
+    val rvSr = Array(0)
+    val rvSv = Array(1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseDenseToSparseReduce(
+        rvB, vA, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipSparseDenseReduce02") {
+    val rvSr = Array(1)
+    val rvSv = Array(1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseDenseToSparseReduce(
+        rvB, vA, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipSparseDenseReduce03") {
+    val rvSr = Array(1, 2)
+    val rvSv = Array(1, 1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseDenseToSparseReduce(
+        rvB, vA, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipSparseDenseReduce04") {
+    val rvSr = Array(1, 2, 4)
+    val rvSv = Array(1, 1, 1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseDenseToSparseReduce(
+        rvB, vA, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipSparseDenseReduce05") {
+    val rvSr = Array(1, 2, 4, 98)
+    val rvSv = Array(1, 1, 1, 1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseDenseToSparseReduce(
+        rvB, vA, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipSparseDenseReduce06") {
+    val rvSr = Array(1, 2, 4, 97, 99)
+    val rvSv = Array(1, 1, 1, 1, 1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseDenseToSparseReduce(
+        rvB, vA, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
+  test("zipSparseDenseReduce down") {
+    val rvSr = Array(1, 2, 4, 97, 99)
+    val rvSv = Array(1, 1, 1, -98, 1)
+    val rvB = (GpiBuffer(rvSr), GpiBuffer(rvSv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseDenseToSparseReduce(
+        rvB, vA, len, srz, srf, srg, src)
+    assert(res == rvSr.zip(rvSv).map { x => srg(vA(x._1), x._2) }.foldLeft(srz)(srf))
+  }
+
   // zipSparseSparse
 
   test("zipSparseSparse00: lenA < lenB") {
@@ -205,13 +394,14 @@ class GpiBufferSuite extends FunSuite {
     val rvSBv = Array(1, 1)
     val rvB = (GpiBuffer(rvSBr), GpiBuffer(rvSBv))
     val ((rvRr, rvRv), denseCountResult, ops) =
-      GpiBuffer.gpiZipSparseSparseToSparse(rvA,
-                                           rvB,
-                                           len,
-                                           sparseValueA,
-                                           sparseValueB,
-                                           sparseValueC,
-                                           f)
+      GpiBuffer.gpiZipSparseSparseToSparse(
+        rvA,
+        rvB,
+        len,
+        sparseValueA,
+        sparseValueB,
+        sparseValueC,
+        f)
     if (DEBUG) println("// ****")
     assert(denseCountResult == 0)
     assert(rvRr.length == denseCountResult)
@@ -383,6 +573,141 @@ class GpiBufferSuite extends FunSuite {
           .mkString("[", ",", "]")))
     }
     BufferSuite.checkSparse((rvRr, rvRv), List((1, 2), (5, 2), (50, 2)))
+  }
+
+  // zipSparseSparseReduce
+
+  test("zipSparseSparseReduce00: lenA < lenB") {
+    val rvSAr = Array(1)
+    val rvSAv = Array(1)
+    val rvA = (GpiBuffer(rvSAr), GpiBuffer(rvSAv))
+    val rvSBr = Array(2, 99)
+    val rvSBv = Array(1, 1)
+    val rvB = (GpiBuffer(rvSBr), GpiBuffer(rvSBv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseSparseToSparseReduce(
+        rvA,
+        rvB,
+        len,
+        srz,
+        srf,
+        srg,
+        src)
+    assert(res == 0)
+  }
+
+  test("zipSparseSparseReduce01: lenA < lenB") {
+    val rvSAr = Array(1)
+    val rvSAv = Array(1)
+    val rvA = (GpiBuffer(rvSAr), GpiBuffer(rvSAv))
+    val rvSBr = Array(1, 99)
+    val rvSBv = Array(1, 1)
+    val rvB = (GpiBuffer(rvSBr), GpiBuffer(rvSBv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseSparseToSparseReduce(
+        rvA,
+        rvB,
+        len,
+        srz,
+        srf,
+        srg,
+        src)
+    assert(res == 1)
+  }
+
+  test("zipSparseSparseReduce02: lenA < lenB") {
+    val rvSAr = Array(1, 5)
+    val rvSAv = Array(1, 1)
+    val rvA = (GpiBuffer(rvSAr), GpiBuffer(rvSAv))
+    val rvSBr = Array(1, 3, 5, 99)
+    val rvSBv = Array(1, 1, 1, 1)
+    val rvB = (GpiBuffer(rvSBr), GpiBuffer(rvSBv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseSparseToSparseReduce(
+        rvA,
+        rvB,
+        len,
+        srz,
+        srf,
+        srg,
+        src)
+    assert(res == 2)
+  }
+
+  test("zipSparseSparseReduce03: lenA < lenB") {
+    val rvSAr = Array(1, 5, 7)
+    val rvSAv = Array(1, 1, 1)
+    val rvA = (GpiBuffer(rvSAr), GpiBuffer(rvSAv))
+    val rvSBr = Array(1, 3, 5, 6, 99)
+    val rvSBv = Array(1, 1, 1, 1, 1)
+    val rvB = (GpiBuffer(rvSBr), GpiBuffer(rvSBv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseSparseToSparseReduce(
+        rvA,
+        rvB,
+        len,
+        srz,
+        srf,
+        srg,
+        src)
+    assert(res == 2)
+  }
+
+  test("zipSparseSparseReduce04: lenA < lenB") {
+    val rvSAr = Array(1, 5, 7, 50)
+    val rvSAv = Array(1, 1, 1, 1)
+    val rvA = (GpiBuffer(rvSAr), GpiBuffer(rvSAv))
+    val rvSBr = Array(1, 3, 5, 6, 50, 99)
+    val rvSBv = Array(1, 1, 1, 1, 1, 1)
+    val rvB = (GpiBuffer(rvSBr), GpiBuffer(rvSBv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseSparseToSparseReduce(
+        rvA,
+        rvB,
+        len,
+        srz,
+        srf,
+        srg,
+        src)
+    assert(res == 3)
+  }
+
+  test("zipSparseSparseReduce05: lenA < lenB") {
+    val rvSAr = Array(1, 5, 7, 50, 99)
+    val rvSAv = Array(1, 1, 1, 1, 1)
+    val rvA = (GpiBuffer(rvSAr), GpiBuffer(rvSAv))
+    val rvSBr = Array(1, 3, 5, 6, 50, 77, 99)
+    val rvSBv = Array(1, 1, 1, 1, 1, 1, 1)
+    val rvB = (GpiBuffer(rvSBr), GpiBuffer(rvSBv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseSparseToSparseReduce(
+        rvA,
+        rvB,
+        len,
+        srz,
+        srf,
+        srg,
+        src)
+    assert(res == 4)
+  }
+
+  test("zipSparseSparseReduce06: lenA < lenB") {
+    val rvSAr = Array(1, 5, 7, 50, 99)
+    val rvSAv = Array(1, 1, 1, 1, 1)
+    val rvA = (GpiBuffer(rvSAr), GpiBuffer(rvSAv))
+    val rvSBr = Array(1, 3, 5, 6, 50, 77, 98)
+    val rvSBv = Array(1, 1, 1, 1, 1, 1, 1)
+    val rvB = (GpiBuffer(rvSBr), GpiBuffer(rvSBv))
+    val (res, ops) =
+      GpiBuffer.gpiZipSparseSparseToSparseReduce(
+        rvA,
+        rvB,
+        len,
+        srz,
+        srf,
+        srg,
+        src)
+    assert(res == 3)
   }
 
   // zipSparseSparse:flip

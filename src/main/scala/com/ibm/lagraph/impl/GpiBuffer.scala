@@ -405,6 +405,7 @@ object GpiBuffer {
     (GpiBuffer(rs, j), GpiBuffer(vs, j), k)
   }
 
+  // for: notspecified
   def gpiZipSparseSparseToDense[@spec(Int) A: ClassTag,
                                 @spec(Int) B: ClassTag,
                                 @spec(Int) C: ClassTag](
@@ -453,6 +454,7 @@ object GpiBuffer {
     (GpiBuffer(vC), denseCountC, len)
   }
 
+  // for: multiplication
   def gpiZipSparseSparseToSparse[@spec(Int) A: ClassTag,
                                  @spec(Int) B: ClassTag,
                                  @spec(Int) C: ClassTag](
@@ -528,6 +530,60 @@ object GpiBuffer {
     }
   }
 
+  def gpiZipSparseSparseToSparseReduce[
+        @spec(Int) A: ClassTag,
+        @spec(Int) B: ClassTag,
+        @spec(Int) C: ClassTag,
+        @spec(Int) D: ClassTag](
+      rvA: (GpiBuffer[Int], GpiBuffer[A]),
+      rvB: (GpiBuffer[Int], GpiBuffer[B]),
+      len: Int,
+      zero: D,
+      f: (C, D) => D,
+      g: (A, B) => C,
+      c: (D, D) => D): (D, Int) = {
+    val lenA = rvA._1.length
+    val lenB = rvB._1.length
+    if (lenA < lenB) {
+      var res = zero
+      var iiA = 0
+      var iiB = 0
+      var iiO = 0
+      while (iiA < lenA && iiB < lenB) {
+        if (rvA._1(iiA) < rvB._1(iiB)) {
+          iiA += 1
+        } else if (rvA._1(iiA) > rvB._1(iiB)) {
+          iiB += 1
+        } else {
+          res = f(g(rvA._2(iiA), rvB._2(iiB)), res)
+          iiO += 1
+          iiA += 1
+          iiB += 1
+        }
+      }
+      (res, iiO)
+    } else {
+      var res = zero
+      var iiA = 0
+      var iiB = 0
+      var iiO = 0
+      while (iiA < lenA && iiB < lenB) {
+        if (rvB._1(iiB) < rvA._1(iiA)) {
+          iiB += 1
+        } else if (rvB._1(iiB) > rvA._1(iiA)) {
+          iiA += 1
+        } else {
+          res = f(g(rvA._2(iiA), rvB._2(iiB)), res)
+          iiO += 1
+          iiA += 1
+          iiB += 1
+        }
+      }
+      (res, iiO)
+    }
+  }
+
+  // for: addition
   def gpiZipSparseSparseToSparseMerge[@spec(Int) A: ClassTag,
                                       @spec(Int) B: ClassTag,
                                       @spec(Int) C: ClassTag](
@@ -555,7 +611,7 @@ object GpiBuffer {
         val v = f(rvA._2(iiA), sparseValueB)
         if (v != sparseValueC) {
           rvCr = rvA._1(iiA) :: rvCr
-          rvCv =  v :: rvCv
+          rvCv = v :: rvCv
         }
         iiA += 1
         iiAok = iiA < lenA
@@ -594,6 +650,7 @@ object GpiBuffer {
     ((GpiBuffer(rvCr.reverse.toArray, iiC), GpiBuffer(rvCv.reverse.toArray, iiC)), iiC, iiO)
   }
 
+  // for: addition, notspecified
   def gpiZipSparseDenseToDense[@spec(Int) A: ClassTag,
                                @spec(Int) B: ClassTag,
                                @spec(Int) C: ClassTag](rvA: (GpiBuffer[Int], GpiBuffer[A]),
@@ -630,6 +687,7 @@ object GpiBuffer {
     (GpiBuffer(vC), denseCountC, len)
   }
 
+  // for: addition, notspecified
   def gpiZipDenseSparseToDense[@spec(Int) A: ClassTag,
                                @spec(Int) B: ClassTag,
                                @spec(Int) C: ClassTag](vA: GpiBuffer[A],
@@ -666,6 +724,7 @@ object GpiBuffer {
     (GpiBuffer(vC), denseCountC, lenA)
   }
 
+  // for: multiplication
   def gpiZipDenseSparseToSparse[@spec(Int) A: ClassTag,
                                 @spec(Int) B: ClassTag,
                                 @spec(Int) C: ClassTag](
@@ -699,6 +758,30 @@ object GpiBuffer {
     ((GpiBuffer(rvCr, iiC), GpiBuffer(rvCv, iiC)), iiC, lenB)
   }
 
+  def gpiZipDenseSparseToSparseReduce[@spec(Int) A: ClassTag,
+                                      @spec(Int) B: ClassTag,
+                                      @spec(Int) C: ClassTag,
+                                      @spec(Int) D: ClassTag](
+      vA: GpiBuffer[A],
+      rvB: (GpiBuffer[Int], GpiBuffer[B]),
+      len: Int,
+      zero: D,
+      f: (C, D) => D,
+      g: (A, B) => C,
+      c: (D, D) => D): (D, Int) = {
+    var res = zero
+    val lenA = vA.length
+    val lenB = rvB._1.length
+    var iA = 0
+    var iiB = 0
+    while (iiB < lenB) {
+      res = f(g(vA(rvB._1(iiB)), rvB._2(iiB)), res)
+      iiB += 1
+    }
+    (res, lenB)
+  }
+
+  // for: multiplication
   def gpiZipSparseDenseToSparse[@spec(Int) A: ClassTag,
                                 @spec(Int) B: ClassTag,
                                 @spec(Int) C: ClassTag](
@@ -732,6 +815,30 @@ object GpiBuffer {
     ((GpiBuffer(rvCr, iiC), GpiBuffer(rvCv, iiC)), iiC, lenA)
   }
 
+  def gpiZipSparseDenseToSparseReduce[@spec(Int) A: ClassTag,
+                                      @spec(Int) B: ClassTag,
+                                      @spec(Int) C: ClassTag,
+                                      @spec(Int) D: ClassTag](
+      rvA: (GpiBuffer[Int], GpiBuffer[A]),
+      vB: GpiBuffer[B],
+      len: Int,
+      zero: D,
+      f: (C, D) => D,
+      g: (A, B) => C,
+      c: (D, D) => D): (D, Int) = {
+    var res = zero
+    val lenA = rvA._1.length
+    val lenB = vB.length
+    var iiA = 0
+    var iB = 0
+    while (iiA < lenA) {
+      res = f(g(rvA._2(iiA), vB(rvA._1(iiA))), res)
+      iiA += 1
+    }
+    (res, lenA)
+  }
+
+  // for: addition, multiplication, notspecified
   def gpiZipDenseDenseToDense[@spec(Int) A: ClassTag,
                               @spec(Int) B: ClassTag,
                               @spec(Int) C: ClassTag](vA: GpiBuffer[A],
@@ -762,6 +869,32 @@ object GpiBuffer {
       println("GpiBuffer: gpiZipDenseDenseToDense: time: >%.3f< s".format(t01))
     }
     (GpiBuffer(vC), denseCountC, len)
+  }
+
+  def gpiZipDenseDenseToDenseReduce[@spec(Int) A: ClassTag,
+                                    @spec(Int) B: ClassTag,
+                                    @spec(Int) C: ClassTag,
+                                    @spec(Int) D: ClassTag](
+      vA: GpiBuffer[A],
+      vB: GpiBuffer[B],
+      len: Int,
+      zero: D,
+      f: (C, D) => D,
+      g: (A, B) => C,
+      c: (D, D) => D): (D, Int) = {
+    var res = zero
+    val lenA = vA.length
+    val lenB = vB.length
+    var iA = 0
+    var iB = 0
+    var iC = 0
+    while (iC < len) {
+      res = f(g(vA(iA), vB(iB)), res)
+      iC += 1
+      iA += 1
+      iB += 1
+    }
+    (res, len)
   }
 
   // ****
@@ -1447,4 +1580,57 @@ object GpiBuffer {
   //    return byteOutputStream.toByteArray().length;
   //  }
 }
+
+
+//  multiplication:
+//
+//  case (uSparse: GpiSparseVector[VS], vSparse: GpiSparseVector[T2]) => {
+//   GpiBuffer.gpiZipSparseSparseToSparse
+//
+//  case (uSparse: GpiSparseVector[VS], vDense: GpiDenseVector[T2]) => {
+//   GpiBuffer.gpiZipSparseDenseToSparse
+//
+//  case (uDense: GpiDenseVector[VS], vSparse: GpiSparseVector[T2]) => {
+//   GpiBuffer.gpiZipDenseSparseToSparse
+//
+//  case (uDense: GpiDenseVector[VS], vDense: GpiDenseVector[T2]) => {
+//   GpiBuffer.gpiZipDenseDenseToDense
+//
+//   addition:
+//  case (uSparse: GpiSparseVector[VS], vSparse: GpiSparseVector[T2]) => {
+//   GpiBuffer.gpiZipSparseSparseToSparseMerge
+//
+//  case (uSparse: GpiSparseVector[VS], vDense: GpiDenseVector[T2]) => {
+//   GpiBuffer.gpiZipSparseDenseToDense
+//
+//  case (uDense: GpiDenseVector[VS], vSparse: GpiSparseVector[T2]) => {
+//   GpiBuffer.gpiZipDenseSparseToDense
+//
+//  case (uDense: GpiDenseVector[VS], vDense: GpiDenseVector[T2]) => {
+//   GpiBuffer.gpiZipDenseDenseToDense
+//
+//   notspecified
+//  case (uSparse: GpiSparseVector[VS], vSparse: GpiSparseVector[T2]) => {
+//   GpiBuffer.gpiZipSparseSparseToDense
+//
+//  case (uSparse: GpiSparseVector[VS], vDense: GpiDenseVector[T2]) => {
+//   GpiBuffer.gpiZipSparseDenseToDense
+//
+//
+//  case (uDense: GpiDenseVector[VS], vSparse: GpiSparseVector[T2]) => {
+//   GpiBuffer.gpiZipDenseSparseToDense
+//
+//
+//  case (uDense: GpiDenseVector[VS], vDense: GpiDenseVector[T2]) => {
+//   GpiBuffer.gpiZipDenseDenseToDense
+//
+//   gpiZipSparseSparseToDense       - n
+//   gpiZipSparseSparseToSparse      - g
+//   gpiZipSparseSparseToSparseMerge - f
+//   gpiZipSparseDenseToDense        - f, n
+//   gpiZipDenseSparseToDense        - f, n
+//   gpiZipDenseSparseToSparse       - g
+//   gpiZipSparseDenseToSparse       - g
+//   gpiZipDenseDenseToDense         - f, g, n
+
 // scalastyle:on println

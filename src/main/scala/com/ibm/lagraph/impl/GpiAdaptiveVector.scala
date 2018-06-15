@@ -301,9 +301,9 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
    *
    */
   def gpi_map[@spec(Int) VS: ClassTag, @spec(Int) T2: ClassTag](
-      f:            (VS) => T2,
-      u:            GpiAdaptiveVector[VS],
-      stats:        Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T2] = {
+      f: (VS) => T2,
+      u: GpiAdaptiveVector[VS],
+      stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T2] = {
     val threshold = u.threshold
     val xVS = classTag[VS]
     val xT2 = classTag[T2]
@@ -322,7 +322,8 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
           threshold)
       }
       case uDense: GpiDenseVector[VS] => {
-        val (bC, denseCountC, ops) = GpiBuffer.gpiMapDenseBufferToDenseBuffer(uDense.iseq, sparseValue, f)
+        val (bC, denseCountC, ops) =
+          GpiBuffer.gpiMapDenseBufferToDenseBuffer(uDense.iseq, sparseValue, f)
         ((bC, denseCountC, ops), "dense")
         if (stats.isDefined) stats.get.increment(f, ops)
         if (denseCountC < u.length * threshold) {
@@ -335,6 +336,108 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
           GpiDenseVector[T2](bC, sparseValue, denseCountC, threshold)
         }
       }
+    }
+  }
+
+  def get_ftype(f: (_ , _) => _): Symbol = {
+    f match {
+      case sg: LagSemigroup[_] =>
+        if (sg.annihilator.isEmpty) 'addition else 'multiplication
+      case _ => 'notspecified
+    }
+  }
+
+  def gpi_inner_product[
+        @spec(Int) VS: ClassTag,
+        @spec(Int) T2: ClassTag,
+        @spec(Int) T3: ClassTag,
+        @spec(Int) T4: ClassTag](
+      f: (T3, T4) => T4, // new
+      g: (VS, T2) => T3, // zip
+      c: (T4, T4) => T4, // new
+      zero: T4, // new
+      u: GpiAdaptiveVector[VS], // zip
+      v: GpiAdaptiveVector[T2], // zip
+    //      sparseValue: T3, // zip -> drop
+    thresholdOpt: Option[Double] = None, // zip
+    //      stats: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[T3] = {
+    stats: Option[GpiAdaptiveVector.Stat] = None): T4 = {
+    val threshold =
+      if (thresholdOpt.isDefined) thresholdOpt.get else u.threshold
+    require(
+      u.length == v.length,
+      "gpi_inner_product: attempt to zip two unequal length vectors, u.length: >%d<, v.length: >%d<"
+        .format(u.length, v.length))
+    val ftype = get_ftype(f)
+    val gtype = get_ftype(g)
+    if (ftype == 'addition && gtype == 'multiplication) { // semiring
+      // check for consistent sparsity
+      require(zero == f(g(u.sparseValue, v.sparseValue), zero))
+      (u, v) match {
+        case (uSparse: GpiSparseVector[VS], vSparse: GpiSparseVector[T2]) => {
+          //            println("AdaptiveVector: gpi_zip: Multiplication, uSparse, vSparse")
+          //            val (rv, denseCountC, ops) =
+          val (res, ops) =
+            GpiBuffer.gpiZipSparseSparseToSparseReduce(
+              uSparse.rv,
+              vSparse.rv,
+              uSparse.length,
+              zero,
+              f,
+              g,
+              c)
+          if (stats.isDefined) stats.get.increment(f, ops)
+          //            GpiSparseVector[T3](rv, sparseValue, u.length, threshold)
+          res
+        }
+        case (uSparse: GpiSparseVector[VS], vDense: GpiDenseVector[T2]) => {
+          val (res, ops) =
+            GpiBuffer.gpiZipSparseDenseToSparseReduce(
+              uSparse.rv,
+              vDense.iseq,
+              uSparse.length,
+              zero,
+              f,
+              g,
+              c)
+          if (stats.isDefined) stats.get.increment(f, ops)
+          res
+        }
+        case (uDense: GpiDenseVector[VS], vSparse: GpiSparseVector[T2]) => {
+          val (res, ops) =
+            GpiBuffer.gpiZipDenseSparseToSparseReduce(
+              uDense.iseq,
+              vSparse.rv,
+              uDense.length,
+              zero,
+              f,
+              g,
+              c)
+          if (stats.isDefined) stats.get.increment(f, ops)
+          res
+        }
+        case (uDense: GpiDenseVector[VS], vDense: GpiDenseVector[T2]) => {
+          val (res, ops) =
+            GpiBuffer.gpiZipDenseDenseToDenseReduce(
+              uDense.iseq,
+              vDense.iseq,
+              uDense.length,
+              zero,
+              f,
+              g,
+              c)
+          if (stats.isDefined) stats.get.increment(f, ops)
+          res
+        }
+      }
+      //      } // end multiplication
+    } else { // not semiring
+      // TODO optimize
+      GpiOps.gpi_reduce(f, c, zero, GpiOps.gpi_zip(g, u, v, stats), stats)
+      // infer sparseValue
+      val sparseValueT3 = g(u.sparseValue, v.sparseValue)
+      val zip = GpiAdaptiveVector.gpi_zip(g, u, v, sparseValueT3, Option(threshold), stats)
+      GpiAdaptiveVector.gpi_reduce(f, c, zero, zip, stats)
     }
   }
 
@@ -366,34 +469,12 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
     require(u.length == v.length,
             "gpi_zip: attempt to zip two unequal length vectors, u.length: >%d<, v.length: >%d<"
               .format(u.length, v.length))
-    val ftype = f match {
-      case sg: LagSemigroup[_] => {
-        // TODO TODO need to fix this!
-        if (sg.annihilator.isEmpty) {
-          if (u.sparseValue == v.sparseValue) "addition" else "notspecified"
-        }
-        else {
-          val aga = sg.annihilator.get
-          if (aga == u.sparseValue && aga == v.sparseValue) {
-            if (false) {
-              println(
-                "gpi_zip: multiplication:  >%s< >%s< >%s<"
-                  .format(u.sparseValue, v.sparseValue, aga)) }
-            "multiplication"
-          } else {
-            if (false) {
-              println(
-                "gpi_zip: notspecified:  >%s< >%s< >%s<"
-                  .format(u.sparseValue, v.sparseValue, aga)); }
-            "notspecified"
-          }
-        }
-      }
-      case _ => "notspecified"
-    }
+    val ftype = if (f(u.sparseValue, v.sparseValue) == sparseValue) {
+      get_ftype(f)
+    } else 'notspecified
     //    println("gpi_zip: FTYPE: >%s<".format(ftype))
     ftype match {
-      case "multiplication" => {
+      case 'multiplication => {
         (u, v) match {
           case (uSparse: GpiSparseVector[VS], vSparse: GpiSparseVector[T2]) => {
             //            println("AdaptiveVector: gpi_zip: Multiplication, uSparse, vSparse")
@@ -457,7 +538,7 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
           }
         }
       } // end multiplication
-      case "addition" => {
+      case 'addition => {
         (u, v) match {
           case (uSparse: GpiSparseVector[VS], vSparse: GpiSparseVector[T2]) => {
             // x            println("AdaptiveVector: gpi_zip: Addition, uSparse, vSparse")
@@ -530,7 +611,7 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
           }
         }
       } // end addition
-      case "notspecified" => {
+      case 'notspecified => {
         val (vC, denseCountC, ops) = (u, v) match {
           case (uSparse: GpiSparseVector[VS], vSparse: GpiSparseVector[T2]) => {
             // x            println("AdaptiveVector: gpi_zip: _, uSparse, vSparse")
