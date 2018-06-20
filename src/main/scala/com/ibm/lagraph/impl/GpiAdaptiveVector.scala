@@ -1364,5 +1364,12 @@ object GpiSparseRowMatrix extends Serializable {
 //    }
 //    nnzCount
 //  }
+  def nnz[T](m: GpiAdaptiveVector[GpiAdaptiveVector[T]]): Long = {
+    var nnzCount = 0L
+    for (r <- 0 until m.size) {
+      nnzCount = m(r).denseCount.toLong + nnzCount
+    }
+    nnzCount
+  }
 }
 // scalastyle:on println

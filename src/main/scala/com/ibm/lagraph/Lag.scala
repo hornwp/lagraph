@@ -615,6 +615,8 @@ abstract class LagMatrix[T: ClassTag] protected (val hc: LagContext, val size: (
     */
   def tM(sr: LagSemiring[T], n: LagMatrix[T]): LagMatrix[T] =
     hc.mTm(sr, this, n)
+  def dM(sr: LagSemiring[T], n: LagMatrix[T]): LagMatrix[T] =
+    hc.mDm(sr, this, n)
   // Hadagard .multiplication
   /**
     * Hadagard multiplication between this matrix and another matrix
@@ -986,6 +988,9 @@ trait LagContext {
   // mTv addition.multiplication
   // experimental
   private[lagraph] def mTm[T: ClassTag](sr: LagSemiring[T],
+                                        m: LagMatrix[T],
+                                        n: LagMatrix[T]): LagMatrix[T]
+  private[lagraph] def mDm[T: ClassTag](sr: LagSemiring[T],
                                         m: LagMatrix[T],
                                         n: LagMatrix[T]): LagMatrix[T]
   // Hadagard .multiplication

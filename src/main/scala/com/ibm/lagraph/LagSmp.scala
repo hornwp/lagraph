@@ -319,6 +319,25 @@ final case class LagSmpContext() extends LagContext {
         mFromMap(m.size, rcvMap, sparseValue)
       }
     }
+  private[lagraph] override def mDm[T: ClassTag](sr: LagSemiring[T],
+                                                 m: LagMatrix[T],
+                                                 n: LagMatrix[T]): LagMatrix[T] = (m, n) match {
+    case (ma: LagSmpMatrix[T], na: LagSmpMatrix[T]) => {
+      require(ma.vov(0).sparseValue == na.vov(0).sparseValue,
+              "mDm does not currently support disparate sparsities")
+      val msSparse = ma.vov(0).sparseValue
+      val vovMtM = GpiOps.gpi_m_times_m(sr.addition,
+                                        sr.multiplication,
+                                        sr.addition,
+                                        sr.zero,
+                                        ma.vov,
+                                        na.vov)
+      val mapMtM = GpiSparseRowMatrix.toMap(vovMtM).map {
+        case (k, v) => ((k._1.toLong, k._2.toLong) -> v)
+      }
+      LagSmpMatrix(this, m.size._1, n.size._2, mapMtM, vovMtM)
+    }
+  }
 
   // *******
   // matrix mechanics

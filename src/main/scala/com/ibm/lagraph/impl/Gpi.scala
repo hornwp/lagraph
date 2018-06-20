@@ -473,7 +473,9 @@ class GpiDstr(val nblockRequested: Int, DEBUG: Boolean = false)
 
     // obtain count and force checkpoint
     val t0 = System.nanoTime()
+    //TODO CACHE?????
     val nBlock = dstrBmatLoaded.matRdd.cache().count()
+//    val nBlock = nrow*ncol
     val t1 = System.nanoTime()
 
     // ****************

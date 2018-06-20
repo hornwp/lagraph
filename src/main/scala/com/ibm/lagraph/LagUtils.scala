@@ -28,6 +28,7 @@ import java.nio.charset.Charset
 import scala.collection.immutable.ListMap
 import scala.collection.mutable.{HashSet => MSet}
 import scala.collection.mutable.{Map => MMap}
+import scala.io.Source
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
@@ -192,6 +193,42 @@ object LagUtils {
       preorder_recur(depth, bar, d, depadd)
     }
     sb.toString()
+  }
+
+  /**
+   * Read a text file from DFS, a local file system (available on all nodes),
+   *  return it as a Map representation of a Matrix
+   *
+   *  Each line in the file must contain a pair of positive (>=0)
+   *  Longs representing a directed edge.
+   *
+   *  @param fspec the file specification
+   *  @return an map representation of the matrix
+   */
+  def fileToMapForMatrix[T](
+      fspecIn: String,
+      value: T): ((Long, Long), Map[(Long, Long), T]) = {
+    // adjust fspec
+    val fspec = if(fspecIn.startsWith("file://")) {
+      fspecIn.stripPrefix("file://")
+    } else fspecIn
+    
+    // offset
+    val off = if (fspec.endsWith(".tsv")) 1L else 0L
+
+    // Load and parse the data
+    var maxRow = -1L
+    var maxCol = -1L
+    val mm: MMap[(Long, Long), T] = MMap()
+    for (line <- Source.fromFile(fspec).getLines) {
+      val parts = line.split("\\s+")
+      val row = parts(0).toLong - off
+      val col = parts(1).toLong - off
+      maxRow = if (row > maxRow) row else maxRow
+      maxCol = if (col > maxCol) col else maxCol
+      mm((row, col)) = value
+    }
+    ((maxRow + 1L, maxCol + 1L), mm.toMap)
   }
 
   /**

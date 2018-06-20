@@ -453,16 +453,16 @@ object GpiOps {
       if (stats.isDefined) stats.get else GpiAdaptiveVector.Stat.Stat()
     val t0 = System.nanoTime()
 
-    val atype = a match {
-      case _: GpiSparseVector[_] => "sparse"
-      case _: GpiDenseVector[_] => "dense"
-    }
-    val utype = u match {
-      case _: GpiSparseVector[_] => "sparse"
-      case _: GpiDenseVector[_] => "dense"
-    }
-
-    //    println("atype: >%s<, utype: >%s<".format(atype, utype))
+//    val atype = a match {
+//      case _: GpiSparseVector[_] => "sparse"
+//      case _: GpiDenseVector[_] => "dense"
+//    }
+//    val utype = u match {
+//      case _: GpiSparseVector[_] => "sparse"
+//      case _: GpiDenseVector[_] => "dense"
+//    }
+//
+//    println("atype: >%s<, utype: >%s<".format(atype, utype))
     val result = u match {
       case ua: GpiSparseVector[GpiAdaptiveVector[T2]] => {
         val rv = ua.rv
@@ -499,6 +499,7 @@ object GpiOps {
       case ua: GpiDenseVector[GpiAdaptiveVector[T2]] => {
         val dbs = ua.iseq
         val sparseValue = ua.sparseValue
+        val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero)
         val bs = Array.ofDim[GpiAdaptiveVector[T4]](dbs.length)
         var i = 0
         val k = dbs.length
@@ -516,13 +517,12 @@ object GpiOps {
             a,
             dbs(i): GpiAdaptiveVector[T2],
             Option(activeStats))
-          if (bs(i) != sparseValue) newDenseCount += 1
+          if (bs(i) != vSparse) newDenseCount += 1
           i += 1
         }
         val t1 = System.nanoTime()
         val t01 = LagUtils.tt(t0, t1)
-        //        println("GpiOps: DENSE: time: >%.3f< s".format(t01))
-        val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero) // TODO zero mayb wrong
+        //        println("GpiOps: DENSE: time: >%.3f<, count: >%s<".format(t01, newDenseCount))
         GpiDenseVector(GpiBuffer(bs), vSparse, newDenseCount, ua.threshold)
         //        GpiAdaptiveVector.fillWithSparse(u.size)(vSparse)
       }

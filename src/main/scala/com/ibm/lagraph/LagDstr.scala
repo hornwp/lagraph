@@ -897,14 +897,17 @@ final case class LagDstrContext(@transient sc: SparkContext,
                                                 sr.zero,
                                                 cAa,
                                                 cBa)
-//            val updatedPartial = cPartial
+//            val updatedPartial = cPartial // DEBUG
             val updatedPartial = GpiOps.gpi_zip(
               GpiOps.gpi_zip(sr.addition, _: GpiAdaptiveVector[T], _: GpiAdaptiveVector[T]),
               iPartial,
               cPartial)
             ((r, c), updatedPartial)
           }
-          val nextPartial = rPartial.cogroup(sra, srb).map(calculate)
+          val nextPartialA = rPartial.cogroup(sra, srb)//.cache()
+//          println("nextpartialA.count: >%s<".format(nextPartialA.count))
+          val nextPartial = nextPartialA.map(calculate).cache()
+          println("nextpartialB.count: >%s<".format(nextPartial.count))
 
           // ********
           // recurse
@@ -932,6 +935,157 @@ final case class LagDstrContext(@transient sc: SparkContext,
       val rcvRdd = transposedResult.flatMap(toRcv)
       hcd.mFromRcvRdd((partial_blocker.ncol, partial_blocker.nrow), rcvRdd.map {
         case (k, v) => ((k._2, k._1), v) }, msSparse)
+
+      //  // for transpose ...
+      //  val bmatRdd = transposedResult.map { case (k, v) =>
+      //    (k, GpiBmatAdaptive(v).asInstanceOf[GpiBmat[T]]) }
+      //  LagDstrMatrix(hcd, rcvRdd,
+      //    GpiDstrBmat(dstr, bmatRdd, maa.dstrBmat.nrow, maa.dstrBmat.ncol,
+      //                maa.dstrBmat.sparseValue))
+    }
+  }
+  private[lagraph] override def mDm[T: ClassTag](sr: LagSemiring[T],
+                                                 ma: LagMatrix[T],
+                                                 mb: LagMatrix[T]): LagMatrix[T] = (ma, mb) match {
+    case (maa: LagDstrMatrix[T], mba: LagDstrMatrix[T]) => {
+      require(maa.dstrBmat.sparseValue == mba.dstrBmat.sparseValue,
+          "mDm does not currently support disparate sparsities")
+      val a_blocker = maa.dstrBmat.blocker
+      val b_blocker = mba.dstrBmat.blocker
+      require(a_blocker.clipN == b_blocker.clipN, "a.clipN: >%s< != b.clipN: >%s<)".format(
+          a_blocker.clipN, b_blocker.clipN))
+      val clipN = a_blocker.clipN
+      require(a_blocker.ncol == b_blocker.ncol, "(%s,%s) d (%s,%s) not supported".format(
+          a_blocker.nrow, a_blocker.ncol,
+          b_blocker.nrow, b_blocker.ncol))
+      val msSparse = maa.dstrBmat.sparseValue
+      val hcd = this
+      val dstr = hcd.dstr
+      val clipnp1 = clipN + 1
+
+      // ********
+      // get dstrBmat
+      val A = maa.dstrBmat
+      val BT = mba.dstrBmat
+      val bt_blocker = b_blocker
+
+      // ********
+      // initialize partial result
+      val partial_blocker = GpiDstrMatrixBlocker((mb.size._1, ma.size._1), clipnp1)
+      def initPartial(rc: (Int, Int)) = {
+        val (r, c) = rc
+        val rChunk = if (r == clipN) partial_blocker.rClipStride else partial_blocker.rStride
+        val cChunk = if (c == clipN) partial_blocker.cClipStride else partial_blocker.cStride
+        val vSparse = GpiAdaptiveVector.fillWithSparse[T](cChunk)(sr.zero)
+        ((r, c), GpiAdaptiveVector.fillWithSparse(rChunk)(vSparse))
+      }
+      val coordRdd = GpiDstr.getCoordRdd(sc, clipN + 1)
+      val Partial = coordRdd.cartesian(coordRdd).map(initPartial)
+      // ********
+      // top level
+      def recurse(contributingIndex: Int,
+                  rPartial: RDD[((Int, Int), GpiAdaptiveVector[GpiAdaptiveVector[T]])],
+                  rA: RDD[((Int, Int), GpiBmat[T])],
+                  rB: RDD[((Int, Int), GpiBmat[T])])
+        : RDD[((Int, Int), GpiAdaptiveVector[GpiAdaptiveVector[T]])] = 
+        if (contributingIndex == clipnp1) rPartial
+        else {
+          def selectA(kv: ((Int, Int), GpiBmat[T])): List[((Int, Int), GpiBmat[T])] = {
+            val (r, c) = kv._1
+            val gxa = kv._2.asInstanceOf[GpiBmat[T]]
+            def selectIt(rd: Int,
+                         dl: List[((Int, Int), GpiBmat[T])]): List[((Int, Int), GpiBmat[T])] =
+              if (rd == clipnp1) dl else selectIt(rd + 1, ((rd, r), gxa) :: dl)
+            val empty = List[((Int, Int), GpiBmat[T])]()
+            if (c == contributingIndex) selectIt(0, empty) else empty
+          }
+          def selectB(kv: ((Int, Int), GpiBmat[T])): List[((Int, Int), GpiBmat[T])] = {
+            val (c, r) = kv._1
+            val gxa = kv._2.asInstanceOf[GpiBmat[T]]
+            val empty = List[((Int, Int), GpiBmat[T])]()
+            def selectIt(rd: Int,
+                         dl: List[((Int, Int), GpiBmat[T])]): List[((Int, Int), GpiBmat[T])] =
+              if (rd == clipnp1) dl else selectIt(rd + 1, ((c, rd), gxa) :: dl)
+            if (r == contributingIndex) selectIt(0, empty) else empty
+          }
+          // ********
+          // permutations
+          val sra = rA.flatMap(selectA)
+          val srb = rB.flatMap(selectB)
+
+          // ********
+          // calculation functor
+          def calculate(
+              kv: ((Int, Int),
+                   (Iterable[GpiAdaptiveVector[GpiAdaptiveVector[T]]],
+                    Iterable[GpiBmat[T]],
+                    Iterable[GpiBmat[T]]))) = {
+            val r = kv._1._1
+            val c = kv._1._2
+            val cPartial = kv._2._1.iterator.next()
+            val cAa = kv._2._2.iterator.next().a
+            val cBa = kv._2._3.iterator.next().a
+            val iPartial = GpiOps.gpi_m_times_m(sr.addition,
+                                                sr.multiplication,
+                                                sr.addition,
+                                                sr.zero,
+                                                cAa,
+                                                cBa)
+//            val updatedPartial = cPartial // DEBUG
+            val updatedPartial = GpiOps.gpi_zip(
+              GpiOps.gpi_zip(sr.addition, _: GpiAdaptiveVector[T], _: GpiAdaptiveVector[T]),
+              iPartial,
+              cPartial)
+            ((r, c), updatedPartial)
+          }
+          val nextPartialA = rPartial.cogroup(sra, srb)//.cache()
+//          println("nextpartialA.count: >%s<".format(nextPartialA.count))
+          val nextPartial = nextPartialA.map(calculate).cache()
+          println("nextpartialB.count: >%s<".format(nextPartial.count))
+
+          // ********
+          // recurse
+          recurse(contributingIndex + 1, nextPartial, rA, rB)
+        }
+      val transposedResult = recurse(0, Partial, A.matRdd, BT.matRdd)
+
+      // ********
+      def toRcv(kv: ((Int, Int), GpiAdaptiveVector[GpiAdaptiveVector[T]])) = {
+        val arOff = kv._1._1.toLong * partial_blocker.rStride.toLong
+        val acOff = kv._1._2.toLong * partial_blocker.cStride.toLong
+        val ac = kv._1._2
+        var res = List[((Long, Long), T)]()
+        val itr = kv._2.denseIterator
+        while (itr.hasNext) {
+          val (ir, rv) = itr.next()
+          val itc = rv.denseIterator
+          while (itc.hasNext) {
+            val (ic, v) = itc.next()
+            res = ((arOff + ir.toLong, acOff + ic.toLong), v) :: res
+          }
+        }
+        res
+      }
+      val rcvRdd = transposedResult.flatMap(toRcv)
+      def perblock(iter: Iterator[((Int, Int), GpiAdaptiveVector[GpiAdaptiveVector[T]])]): Iterator[((Int, Int), GpiBmat[T])] = {
+        require(iter.hasNext)
+        val rcb = iter.next()
+        require(!iter.hasNext)
+        List(Tuple2(Tuple2(rcb._1._1, rcb._1._1), GpiBmat(rcb._2))).toIterator
+      }
+      LagDstrMatrix(
+          hcd,
+          rcvRdd,
+          GpiDstrBmat(
+              A.dstr,
+              partial_blocker,
+              transposedResult.mapPartitions(perblock, preservesPartitioning = true),
+              partial_blocker.nrow,
+              partial_blocker.ncol,
+              msSparse))
+
+      //Dhcd.mFromRcvRdd((partial_blocker.ncol, partial_blocker.nrow), rcvRdd.map {
+      //D  case (k, v) => ((k._2, k._1), v) }, msSparse)
 
       //  // for transpose ...
       //  val bmatRdd = transposedResult.map { case (k, v) =>
