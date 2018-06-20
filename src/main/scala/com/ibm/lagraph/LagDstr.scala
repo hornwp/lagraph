@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 // import collection.immutable._
 import scala.collection.mutable.{Map => MMap, ArrayBuffer}
 import com.ibm.lagraph.impl.{
+  GpiBlockMatrixPartitioner,
   GpiDstr,
   GpiBvec,
   GpiBmat,
@@ -1040,7 +1041,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
           }
           val nextPartialA = rPartial.cogroup(sra, srb)//.cache()
 //          println("nextpartialA.count: >%s<".format(nextPartialA.count))
-          val nextPartial = nextPartialA.map(calculate).cache()
+          val nextPartial = nextPartialA.map(calculate).partitionBy(new GpiBlockMatrixPartitioner(partial_blocker.clipN + 1)).cache()
           println("nextpartialB.count: >%s<".format(nextPartial.count))
 
           // ********
@@ -1071,7 +1072,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
         require(iter.hasNext)
         val rcb = iter.next()
         require(!iter.hasNext)
-        List(Tuple2(Tuple2(rcb._1._1, rcb._1._1), GpiBmat(rcb._2))).toIterator
+        List(Tuple2(Tuple2(rcb._1._1, rcb._1._2), GpiBmat(rcb._2))).toIterator
       }
       LagDstrMatrix(
           hcd,
