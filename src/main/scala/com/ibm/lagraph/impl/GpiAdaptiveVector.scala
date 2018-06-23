@@ -386,7 +386,10 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
               f,
               g,
               c)
-          if (stats.isDefined) stats.get.increment(f, ops)
+          if (stats.isDefined) {
+            stats.get.increment(f, ops)
+            stats.get.increment(g, ops)
+          }
           //            GpiSparseVector[T3](rv, sparseValue, u.length, threshold)
           res
         }
@@ -400,7 +403,10 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
               f,
               g,
               c)
-          if (stats.isDefined) stats.get.increment(f, ops)
+          if (stats.isDefined) {
+            stats.get.increment(f, ops)
+            stats.get.increment(g, ops)
+          }
           res
         }
         case (uDense: GpiDenseVector[VS], vSparse: GpiSparseVector[T2]) => {
@@ -413,7 +419,10 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
               f,
               g,
               c)
-          if (stats.isDefined) stats.get.increment(f, ops)
+          if (stats.isDefined) {
+            stats.get.increment(f, ops)
+            stats.get.increment(g, ops)
+          }
           res
         }
         case (uDense: GpiDenseVector[VS], vDense: GpiDenseVector[T2]) => {
@@ -426,7 +435,10 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
               f,
               g,
               c)
-          if (stats.isDefined) stats.get.increment(f, ops)
+          if (stats.isDefined) {
+            stats.get.increment(f, ops)
+            stats.get.increment(g, ops)
+          }
           res
         }
       }
