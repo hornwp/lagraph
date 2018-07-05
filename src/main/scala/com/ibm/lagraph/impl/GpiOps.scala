@@ -352,12 +352,13 @@ object GpiOps {
         var newDenseCount = 0
         while (i < k) {
           bs(i) = gpi_innerp(f,
-                                g,
-                                c,
-                                zero,
-                                u,
-                                dbs(i): GpiAdaptiveVector[T1],
-                                stats)
+                             g,
+                             c,
+                             zero,
+                             u,
+                             dbs(i): GpiAdaptiveVector[T1],
+                             stats)
+//          bs(i) = zero // DEBUG turn off
           if (bs(i) != zero) newDenseCount += 1
           i += 1
         }
@@ -370,6 +371,7 @@ object GpiOps {
         } else {
           GpiDenseVector(GpiBuffer(bs), zero, newDenseCount, aa.threshold)
         }
+//        GpiAdaptiveVector.fillWithSparse(a.size)(zero) // DEBUG turn off
       }
     }
     result
@@ -465,6 +467,7 @@ object GpiOps {
 //    }
 //
 //    println("atype: >%s<, utype: >%s<".format(atype, utype))
+    val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero)
     val result = u match {
       case ua: GpiSparseVector[GpiAdaptiveVector[T2]] => {
         val rv = ua.rv
@@ -489,7 +492,6 @@ object GpiOps {
           }
           i += 1
         }
-        val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero) // TODO zero mayb wrong
         val bi = GpiBuffer(rs, j)
         val bv = GpiBuffer(vs, j)
         val t = ua.threshold
@@ -498,7 +500,6 @@ object GpiOps {
       case ua: GpiDenseVector[GpiAdaptiveVector[T2]] => {
         val dbs = ua.iseq
         val sparseValue = ua.sparseValue
-        val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero)
         val bs = Array.ofDim[GpiAdaptiveVector[T4]](dbs.length)
         var i = 0
         val k = dbs.length
@@ -516,6 +517,7 @@ object GpiOps {
             a,
             dbs(i): GpiAdaptiveVector[T2],
             Option(activeStats))
+//          bs(i) = vSparse // DEBUG turn off mTv
           if (bs(i) != vSparse) newDenseCount += 1
           i += 1
         }

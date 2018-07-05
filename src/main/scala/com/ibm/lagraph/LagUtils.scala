@@ -44,10 +44,9 @@ import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
 
 /** Lag Utility object */
 object LagUtils {
-
   /** Given a Natural number compute the bounding power of two (scale) */
   def pow2Bound(nv: Long): Int = {
-    require(nv > 0L)
+    require(nv >= 0L)
     def recur(curScale: Int, curBound: Long): (Boolean, Int, Long) = {
       if (curBound >= nv) {
         (true, curScale, curBound)
@@ -55,7 +54,7 @@ object LagUtils {
         recur(curScale + 1, curBound * 2L)
       }
     }
-    recur(0, 1L)._2
+    if (nv == 0) 0 else recur(0, 1L)._2
   }
 
   /**

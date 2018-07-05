@@ -993,7 +993,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
         else {
           def selectA(kv: ((Int, Int), GpiBmat[T])): List[((Int, Int), GpiBmat[T])] = {
             val (r, c) = kv._1
-            val gxa = kv._2.asInstanceOf[GpiBmat[T]]
+            val gxa = kv._2
             def selectIt(rd: Int,
                          dl: List[((Int, Int), GpiBmat[T])]): List[((Int, Int), GpiBmat[T])] =
               if (rd == clipnp1) dl else selectIt(rd + 1, ((rd, r), gxa) :: dl)
@@ -1002,11 +1002,11 @@ final case class LagDstrContext(@transient sc: SparkContext,
           }
           def selectB(kv: ((Int, Int), GpiBmat[T])): List[((Int, Int), GpiBmat[T])] = {
             val (c, r) = kv._1
-            val gxa = kv._2.asInstanceOf[GpiBmat[T]]
-            val empty = List[((Int, Int), GpiBmat[T])]()
+            val gxa = kv._2
             def selectIt(rd: Int,
                          dl: List[((Int, Int), GpiBmat[T])]): List[((Int, Int), GpiBmat[T])] =
               if (rd == clipnp1) dl else selectIt(rd + 1, ((c, rd), gxa) :: dl)
+            val empty = List[((Int, Int), GpiBmat[T])]()
             if (r == contributingIndex) selectIt(0, empty) else empty
           }
           // ********
