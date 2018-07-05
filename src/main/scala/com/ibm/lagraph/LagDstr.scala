@@ -908,6 +908,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
           val nextPartialA = rPartial.cogroup(sra, srb)//.cache()
 //          println("nextpartialA.count: >%s<".format(nextPartialA.count))
           val nextPartial = nextPartialA.map(calculate).cache()
+          nextPartialA.unpersist(true)
           println("nextpartialB.count: >%s<".format(nextPartial.count))
 
           // ********
