@@ -991,7 +991,7 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
     }
   }
 
-  class Stat {
+  class Stat extends Serializable {
     val stats: MMap[String, Any] = MMap()
     def get[T](key: String): T = {
       stats(key).asInstanceOf[T]

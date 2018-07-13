@@ -974,6 +974,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
       // ********
       // initialize partial result
       val partial_blocker = GpiDstrMatrixBlocker((mb.size._1, ma.size._1), clipnp1)
+      val pbPartitioner = new GpiBlockMatrixPartitioner(partial_blocker.clipN + 1)
       def initPartial(rc: (Int, Int)) = {
         val (r, c) = rc
         val rChunk = if (r == clipN) partial_blocker.rClipStride else partial_blocker.rStride
@@ -982,7 +983,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
         ((r, c), GpiAdaptiveVector.fillWithSparse(rChunk)(vSparse))
       }
       val coordRdd = GpiDstr.getCoordRdd(sc, clipN + 1)
-      val Partial = coordRdd.cartesian(coordRdd).map(initPartial)
+      val Partial = coordRdd.cartesian(coordRdd).map(initPartial).partitionBy(pbPartitioner)
       // ********
       // top level
       def recurse(contributingIndex: Int,
@@ -1012,16 +1013,20 @@ final case class LagDstrContext(@transient sc: SparkContext,
           }
           // ********
           // permutations
-          val sra = rA.flatMap(selectA)
-          val srb = rB.flatMap(selectB)
+          val sra = rA.flatMap(selectA).partitionBy(pbPartitioner)
+          val srb = rB.flatMap(selectB).partitionBy(pbPartitioner)
 
           // ********
           // calculation functor
+          val stats = GpiAdaptiveVector.Stat.Stat()
           def calculate(
               kv: ((Int, Int),
                    (Iterable[GpiAdaptiveVector[GpiAdaptiveVector[T]]],
                     Iterable[GpiBmat[T]],
                     Iterable[GpiBmat[T]]))) = {
+            val t0 = System.nanoTime()
+            val t0Add = stats.getAdd
+            val t0Mul = stats.getMul
             val r = kv._1._1
             val c = kv._1._2
             val cPartial = kv._2._1.iterator.next()
@@ -1032,17 +1037,37 @@ final case class LagDstrContext(@transient sc: SparkContext,
                                                 sr.addition,
                                                 sr.zero,
                                                 cAa,
-                                                cBa)
-//            val updatedPartial = cPartial // DEBUG
+                                                cBa,
+                                                Option(stats))
+            //            val updatedPartial = cPartial // DEBUG
+            val t1 = System.nanoTime()
+    val t01 = (t1 - t0) * 1.0e-9
+    val t01Add = stats.getAdd - t0Add
+    val t01Mul = stats.getMul - t0Mul
+    val mflops =  (t01Add + t01Mul).toDouble / t01 * 1.0e-6
+    
+//    println ("mTm: t: >%.3f<, mflops: >%.3f<, adds: >(%s,%s), muls: >(%s,%s)".format(
+//        t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul)))
             val updatedPartial = GpiOps.gpi_zip(
               GpiOps.gpi_zip(sr.addition, _: GpiAdaptiveVector[T], _: GpiAdaptiveVector[T]),
               iPartial,
               cPartial)
+            println(("mDm: updatedPartial for: >( %s , %s );" +
+                "mTm: t: > %.3f <, mflops: > %.3f <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
+                "zip: t: > %.3f <").format(
+                r,c,
+                t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul),
+                LagUtils.tt(t1, System.nanoTime())))
+//            updatedPartial(1) match {
+//              case _: com.ibm.lagraph.impl.GpiDenseVector[_] => println("DENSE")
+//              case _: com.ibm.lagraph.impl.GpiSparseVector[_] => println("SPARSE")
+//            }
             ((r, c), updatedPartial)
           }
           val nextPartialA = rPartial.cogroup(sra, srb)//.cache()
 //          println("nextpartialA.count: >%s<".format(nextPartialA.count))
-          val nextPartial = nextPartialA.map(calculate).partitionBy(new GpiBlockMatrixPartitioner(partial_blocker.clipN + 1)).cache()
+          val nextPartial = nextPartialA.map(calculate).partitionBy(pbPartitioner).cache()
+          nextPartial.count
 
           // ********
           // recurse

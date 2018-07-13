@@ -453,9 +453,9 @@ object GpiOps {
     val defdstats = stats.isEmpty
     val activeStats =
       if (stats.isDefined) stats.get else GpiAdaptiveVector.Stat.Stat()
-    val t0 = System.nanoTime()
-    val t0Add = activeStats.getAdd
-    val t0Mul = activeStats.getMul
+//    val t0 = System.nanoTime()
+//    val t0Add = activeStats.getAdd
+//    val t0Mul = activeStats.getMul
 
 //    val atype = a match {
 //      case _: GpiSparseVector[_] => "sparse"
@@ -532,14 +532,14 @@ object GpiOps {
     //    val vSparse = GpiAdaptiveVector.fillWithSparse(a.size)(zero)
     //    val mSparse = GpiAdaptiveVector.fillWithSparse(u.size)(vSparse)
     //    mSparse
-    val t01 = (System.nanoTime() - t0) * 1.0e-9
-    val t01Add = activeStats.getAdd - t0Add
-    val t01Mul = activeStats.getMul - t0Mul
-    
-    
-    val mflops =  (t01Add + t01Mul).toDouble / t01 * 1.0e-6
-    println ("mTm: t: >%.3f<, mflops: >%.3f<, adds: >(%s,%s), muls: >(%s,%s)".format(
-        t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul)))
+//    val t01 = (System.nanoTime() - t0) * 1.0e-9
+//    val t01Add = activeStats.getAdd - t0Add
+//    val t01Mul = activeStats.getMul - t0Mul
+//    
+//    
+//    val mflops =  (t01Add + t01Mul).toDouble / t01 * 1.0e-6
+//    println ("mTm: t: >%.3f<, mflops: >%.3f<, adds: >(%s,%s), muls: >(%s,%s)".format(
+//        t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul)))
     //        println("GpiOps: DENSE: time: >%.3f<, count: >%s<".format(t01, newDenseCount))
     result
 
