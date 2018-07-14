@@ -991,7 +991,11 @@ final case class LagDstrContext(@transient sc: SparkContext,
                   rA: RDD[((Int, Int), GpiBmat[T])],
                   rB: RDD[((Int, Int), GpiBmat[T])])
         : RDD[((Int, Int), GpiAdaptiveVector[GpiAdaptiveVector[T]])] = 
-        if (contributingIndex == clipnp1) rPartial
+        if (contributingIndex == clipnp1) {
+          val rp = rPartial.cache()
+          rp.count
+          rp
+        }
         else {
           def selectA(kv: ((Int, Int), GpiBmat[T])): List[((Int, Int), GpiBmat[T])] = {
             val (r, c) = kv._1
@@ -1064,10 +1068,16 @@ final case class LagDstrContext(@transient sc: SparkContext,
 //            }
             ((r, c), updatedPartial)
           }
-          val nextPartialA = rPartial.cogroup(sra, srb)//.cache()
+//          val nextPartialA = rPartial.cogroup(sra, srb)//.cache()
 //          println("nextpartialA.count: >%s<".format(nextPartialA.count))
-          val nextPartial = nextPartialA.map(calculate).partitionBy(pbPartitioner).cache()
-          nextPartial.count
+          val nextPartialA = rPartial.cogroup(sra, srb).map(calculate).partitionBy(pbPartitioner)
+          val nextPartial = if ((contributingIndex + 1 % 20) == 0) {
+            val npa = nextPartialA.cache()
+            npa.count
+            npa
+          } else {
+            nextPartialA
+          }
 
           // ********
           // recurse
