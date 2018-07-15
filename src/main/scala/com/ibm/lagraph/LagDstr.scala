@@ -1056,10 +1056,12 @@ final case class LagDstrContext(@transient sc: SparkContext,
               GpiOps.gpi_zip(sr.addition, _: GpiAdaptiveVector[T], _: GpiAdaptiveVector[T]),
               iPartial,
               cPartial)
-            println(("mDm: updatedPartial for: >( %s , %s ), contributingIndex: > %s <;" +
+            
+            // for profiling
+            println(("mDm: updatedPartial for (r,c): >( %s , %s ), partition: > %s <, contributingIndex: > %s <;" +
               "mTm: t: > %.3f <, mflops: > %.3f <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
               "zip: t: > %.3f <").format(
-                r, c, contributingIndex,
+                r, c, pbPartitioner.getPartition(Tuple2(r,c)), contributingIndex,
                 t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul),
                 LagUtils.tt(t1, System.nanoTime())))
             //            updatedPartial(1) match {
