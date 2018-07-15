@@ -1045,33 +1045,34 @@ final case class LagDstrContext(@transient sc: SparkContext,
                                                 Option(stats))
             //            val updatedPartial = cPartial // DEBUG
             val t1 = System.nanoTime()
-    val t01 = (t1 - t0) * 1.0e-9
-    val t01Add = stats.getAdd - t0Add
-    val t01Mul = stats.getMul - t0Mul
-    val mflops =  (t01Add + t01Mul).toDouble / t01 * 1.0e-6
-    
-//    println ("mTm: t: >%.3f<, mflops: >%.3f<, adds: >(%s,%s), muls: >(%s,%s)".format(
-//        t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul)))
+            val t01 = (t1 - t0) * 1.0e-9
+            val t01Add = stats.getAdd - t0Add
+            val t01Mul = stats.getMul - t0Mul
+            val mflops = (t01Add + t01Mul).toDouble / t01 * 1.0e-6
+
+            //    println ("mTm: t: >%.3f<, mflops: >%.3f<, adds: >(%s,%s), muls: >(%s,%s)".format(
+            //        t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul)))
             val updatedPartial = GpiOps.gpi_zip(
               GpiOps.gpi_zip(sr.addition, _: GpiAdaptiveVector[T], _: GpiAdaptiveVector[T]),
               iPartial,
               cPartial)
-            println(("mDm: updatedPartial for: >( %s , %s );" +
-                "mTm: t: > %.3f <, mflops: > %.3f <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
-                "zip: t: > %.3f <").format(
-                r,c,
+            println(("mDm: updatedPartial for: >( %s , %s ), contributingIndex: > %s <;" +
+              "mTm: t: > %.3f <, mflops: > %.3f <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
+              "zip: t: > %.3f <").format(
+                r, c, contributingIndex,
                 t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul),
                 LagUtils.tt(t1, System.nanoTime())))
-//            updatedPartial(1) match {
-//              case _: com.ibm.lagraph.impl.GpiDenseVector[_] => println("DENSE")
-//              case _: com.ibm.lagraph.impl.GpiSparseVector[_] => println("SPARSE")
-//            }
+            //            updatedPartial(1) match {
+            //              case _: com.ibm.lagraph.impl.GpiDenseVector[_] => println("DENSE")
+            //              case _: com.ibm.lagraph.impl.GpiSparseVector[_] => println("SPARSE")
+            //            }
             ((r, c), updatedPartial)
           }
-//          val nextPartialA = rPartial.cogroup(sra, srb)//.cache()
-//          println("nextpartialA.count: >%s<".format(nextPartialA.count))
+          //          val nextPartialA = rPartial.cogroup(sra, srb)//.cache()
+          //          println("nextpartialA.count: >%s<".format(nextPartialA.count))
           val nextPartialA = rPartial.cogroup(sra, srb).map(calculate).partitionBy(pbPartitioner)
           val nextPartial = if ((contributingIndex + 1 % 20) == 0) {
+            println("mDm: count for contributingIndex: > %s <".format(contributingIndex))
             val npa = nextPartialA.cache()
             npa.count
             npa
