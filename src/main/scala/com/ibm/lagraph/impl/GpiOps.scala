@@ -439,6 +439,706 @@ object GpiOps {
    *  @param sparseValue determines sparsity for output of semiring addition
    *
    */
+  def gpi_m_times_m_opt[@spec(Int) T1: ClassTag, @spec(Int) T2: ClassTag, @spec(Int) T3: ClassTag, @spec(Int) T4: ClassTag](
+      f: (T3, T4) => T4,
+      g: (T2, T1) => T3,
+      c: (T4, T4) => T4,
+      zero: T4,
+      a: GpiAdaptiveVector[GpiAdaptiveVector[T1]],
+      u: GpiAdaptiveVector[GpiAdaptiveVector[T2]],
+      statsOption: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[GpiAdaptiveVector[T4]] = {
+    
+//    def intersect[T](ths: Array[Int], thsV: Array[T], that: Array[Int], thatV: Array[T]): List[(T,T)] = {
+//      val occ = occCounts(that.seq)
+//      val b = new scala.collection.mutable.ListBuffer[(T,T)]() // newBuilder
+//      for (x <- ths) {
+//        val ox = occ(x)  // Avoid multiple map lookups
+//        if (ox > 0) {
+////          b += x
+//          b += Tuple2(thsV(x), thatV(x))
+//          occ(x) = ox - 1
+//        }
+//      }
+//      b.result()
+//    }
+//    def intersect[T](ths: Array[Int], that: Array[Int]): List[(Int, Int)] = {
+//      val occ = occCounts(that.seq)
+//      val b = new scala.collection.mutable.ListBuffer[(Int, Int)]() // newBuilder
+//      for (x <- ths.zipWithIndex) {
+//        val ox = occ(x._1)  // Avoid multiple map lookups
+//        if (ox > -1) {
+//          b += Tuple2(x._2, ox)
+//          occ(x._1) = -1
+//        }
+//      }
+//      b.result()
+//    }
+    def intersect[@spec(Int) T1: ClassTag, @spec(Int) T2: ClassTag, @spec(Int) T3: ClassTag, @spec(Int) T4: ClassTag](
+      f: (T3, T4) => T4,
+      g: (T2, T1) => T3,
+      zero: T4,
+      ths: Array[Int], thsV: Array[T1], that: Array[Int], thatV: Array[T2]): T4 = {
+      val occ = occCounts(that.seq)
+      var res = zero
+      for (x <- ths.zipWithIndex) {
+        val ox = occ(x._1)  // Avoid multiple map lookups
+        if (ox > -1) {
+          res = f(g(thatV(ox), thsV(x._2)), res)
+          occ(x._1) = -1
+        }
+      }
+      res
+    }
+  
+//    def occCounts[B](sq: Seq[B]): scala.collection.mutable.Map[B, Int] = {
+//      val occ = new scala.collection.mutable.HashMap[B, Int] { override def default(k: B) = 0 }
+//      for (y <- sq) occ(y) += 1
+//      occ
+//    }
+    def occCounts[B, T](sq: Seq[B]): scala.collection.mutable.Map[B, Int] = {
+      val occ = new scala.collection.mutable.HashMap[B, Int] { override def default(k: B) = -1 }
+      for (y <- sq.zipWithIndex) occ(y._1) = y._2
+      occ
+    }
+    var SS = 0
+    var SD = 0
+    var DD = 0
+    val stats = statsOption.get
+    var opsTot = 0
+    // ********
+//    val zero = 0
+    val Ain = a
+    val Bin = u
+    val vSparse = GpiAdaptiveVector.fillWithSparse(Ain.size)(zero)
+    val A = Ain.asInstanceOf[GpiDenseVector[GpiAdaptiveVector[T1]]]
+    val B = Bin.asInstanceOf[GpiDenseVector[GpiAdaptiveVector[T2]]]
+    val t0 = System.nanoTime()
+    val dbs = B.iseq
+    val dbsx = A.iseq
+    val kx = dbsx.length
+    //              val sparseValue = B.sparseValue
+    //            println("XXXXX: A.sparse: (%s,%s) >%s< >%s<".format(r,c, A(0).length, A.sparseValue.length))
+    //            println("XXXXX: B.sparse: (%s,%s) >%s< >%s<".format(r,c, B(0).length, B.sparseValue.length))
+    //              println("XXXXX: A.sparse: >%s<".format(A.sparseValue))
+    //              println("XXXXX: B.sparse: >%s<".format(B.sparseValue))
+    //              println("dbs.length:>%s<, dbsx.length:>%s<".format(dbs.length, dbsx.length)) //(6431,1024)
+    val bs = Array.ofDim[GpiAdaptiveVector[T4]](dbs.length)
+    var i = 0
+    val k = dbs.length
+    var newDenseCount = 0
+    while (i < k) {
+      // gpi_m_times_v
+      val u = dbs(i)
+      var ix = 0
+      var newDenseCountx = 0
+      val bsx = Array.ofDim[T4](dbsx.length) // careful, with this!
+      while (ix < kx) {
+        //  gpi_innerp
+        // gpi_inner_product
+        val v = dbsx(ix)
+        bsx(ix) =
+          (u, v) match {
+            case (uSparse: GpiSparseVector[T1], vSparse: GpiSparseVector[T2]) => {
+              SS += 1
+              //****
+//              val occ = occCounts(vSparse.rv._1.elems)
+//              var res = zero
+//              for (x <- uSparse.rv._1.elems.zipWithIndex) {
+//                val ox = occ(x._1)  // Avoid multiple map lookups
+//                if (ox > -1) {
+//                  res = f(g(vSparse.rv._2.elems(ox), uSparse.rv._2.elems(x._2)), res)
+////                  occ(x._1) = -1
+//                }
+//              }
+//              res
+              //****
+              var res = zero
+              if (uSparse.rv._1.elems.size < vSparse.rv._1.elems.size) {
+                for (x <- uSparse.rv._1.elems.zipWithIndex) {
+                  val ox = vSparse.rv._1.asmap(x._1)
+                  if (ox > -1) {
+                    res = f(g(uSparse.rv._2.elems(x._2), vSparse.rv._2.elems(ox)), res)
+                    opsTot += 1
+                  }
+                }
+              } else {
+                for (x <- vSparse.rv._1.elems.zipWithIndex) {
+                  val ox = uSparse.rv._1.asmap(x._1)
+                  if (ox > -1) {
+                    res = f(g(uSparse.rv._2.elems(ox), vSparse.rv._2.elems(x._2)), res)
+                    opsTot += 1
+                  }
+                }
+              }
+              res
+              //****
+//              val occ = occCounts(uSparse.rv._1.elems)
+////              print("S%s-%s".format(uSparse.rv._1.elems.size,vSparse.rv._1.elems.size))
+//              var res = zero
+//              for (x <- vSparse.rv._1.elems.zipWithIndex) {
+//                val ox = occ(x._1)  // Avoid multiple map lookups
+//                if (ox > -1) {
+//                  res = f(g(uSparse.rv._2.elems(ox), vSparse.rv._2.elems(x._2)), res)
+//                  opsTot += 1
+////                  occ(x._1) = -1
+//                }
+//              }
+//              res
+              //****
+//              var res = zero
+//              val test = vSparse.rv._1.elems.intersect(uSparse.rv._1.elems)
+////              val test = uSparse.rv._1.elems.intersect(vSparse.rv._1.elems)
+//              for (e <- test) {
+//                opsTot += 1
+//              }
+//              res
+              //****
+//              val res = intersect(f, g, zero, uSparse.rv._1.elems, uSparse.rv._2.elems, vSparse.rv._1.elems, vSparse.rv._2.elems)
+//              var res = zero
+//              val intersection = intersect(uSparse.rv._1.elems, vSparse.rv._1.elems)
+//              val intersection = intersect(vSparse.rv._1.elems, uSparse.rv._1.elems)
+//              for (e <- intersection) {
+////                res = f(g(uSparse.rv._2.elems(e._1), vSparse.rv._2.elems(e._2)), res)
+//                res = f(g(uSparse.rv._2.elems(e._2), vSparse.rv._2.elems(e._1)), res)
+//                opsTot += 1
+////                res = zero
+////                res = f(g(uSparse.rv._2(e), vSparse.rv._2(e)), res)
+//              }
+//              res
+              //****
+//              // GpiBuffer.gpiZipSparseSparseToSparseReduce
+//              val lenA = uSparse.rv._1.length
+//              val lenB = vSparse.rv._1.length
+//              if (lenA < lenB) {
+//                var res = zero
+//                var iiA = 0
+//                var iiB = 0
+//                while (iiA < lenA && iiB < lenB) {
+//                  if (uSparse.rv._1(iiA) < vSparse.rv._1(iiB)) {
+//                    iiA += 1
+//                  } else if (uSparse.rv._1(iiA) > vSparse.rv._1(iiB)) {
+//                    iiB += 1
+//                  } else {
+//                    res = f(g(uSparse.rv._2(iiA), vSparse.rv._2(iiB)), res)
+////                    res += uSparse.rv._2(iiA) * vSparse.rv._2(iiB)
+//                    opsTot += 1
+//                    iiA += 1
+//                    iiB += 1
+//                  }
+//                }
+//                //      (res, iiO)
+//                res
+//              } else {
+//                var res = zero
+//                var iiA = 0
+//                var iiB = 0
+//                while (iiA < lenA && iiB < lenB) {
+//                  if (vSparse.rv._1(iiB) < uSparse.rv._1(iiA)) {
+//                    iiB += 1
+//                  } else if (vSparse.rv._1(iiB) > uSparse.rv._1(iiA)) {
+//                    iiA += 1
+//                  } else {
+//                    res = f(g(uSparse.rv._2(iiA), vSparse.rv._2(iiB)), res)
+////                    res += uSparse.rv._2(iiA) * vSparse.rv._2(iiB)
+//                    opsTot += 1
+//                    iiA += 1
+//                    iiB += 1
+//                  }
+//                }
+//                //      (res, iiO)
+//                res
+//              }
+            }
+            case (uSparse: GpiSparseVector[T4], vDense: GpiDenseVector[T4]) => {
+              SD += 1
+              // GpiBuffer.gpiZipSparseDenseToSparseReduce
+              var res = zero
+              val lenA = uSparse.rv._1.length
+              //                        val lenB = vDense.iseq.length
+              var iiA = 0
+              //                        var iB = 0
+              while (iiA < lenA) {
+                res = f(g(uSparse.rv._2(iiA), vDense.iseq(uSparse.rv._1(iiA))), res)
+//                res += uSparse.rv._2(iiA) * vDense.iseq(uSparse.rv._1(iiA))
+                iiA += 1
+              }
+              opsTot += lenA
+              res
+            }
+            case (uDense: GpiDenseVector[T4], vSparse: GpiSparseVector[T4]) => {
+              SD += 1
+              // GpiBuffer.gpiZipDenseSparseToSparseReduce
+              var res = zero
+              //                        val lenA = uDense.iseq.length
+              val lenB = vSparse.rv._1.length
+              //                        var iA = 0
+              var iiB = 0
+              while (iiB < lenB) {
+                res = f(g(uDense.iseq(vSparse.rv._1(iiB)), vSparse.rv._2(iiB)), res)
+//                res += uDense.iseq(vSparse.rv._1(iiB)) * vSparse.rv._2(iiB)
+                iiB += 1
+              }
+              opsTot += lenB
+              res
+            }
+            case (uDense: GpiDenseVector[T4], vDense: GpiDenseVector[T4]) => {
+              DD += 1
+              // GpiBuffer.gpiZipDenseDenseToDenseReduce
+              var res = zero
+              val lenA = uDense.iseq.length
+              val lenB = vDense.iseq.length
+              //                        var iA = 0
+              //                        var iB = 0
+              var iC = 0
+              //    while (iC < len) {
+              while (iC < lenA) {
+                res = f(g(uDense.iseq(iC), vDense.iseq(iC)), res)
+//                res += uDense.iseq(iC) * vDense.iseq(iC)
+                iC += 1
+                //                          iA += 1
+                //                          iB += 1
+              }
+              opsTot += lenA
+              res
+            }
+          }
+        // ****
+        //                    bsx(ix) = zero // DEBUG turn off
+        if (bsx(ix) != zero) newDenseCountx += 1
+        ix += 1
+      }
+      bs(i) = // addded
+        if (newDenseCountx < dbsx.length * A.threshold) {
+          val x = GpiSparseVector(
+            GpiAdaptiveVector.toSparseBuffers(GpiBuffer(bsx), zero, newDenseCountx),
+            zero,
+            dbsx.length,
+            A.threshold)
+          //                    print("S(%s,%s)%s".format(r, c, kx))
+          x
+        } else {
+          val x = GpiDenseVector(GpiBuffer(bsx), zero, newDenseCountx, A.threshold)
+          //                    print("D%s".format(x.length))
+          x
+        }
+      //          bs(i) = vSparse // DEBUG turn off mTv
+      if (bs(i) != vSparse) newDenseCount += 1
+      //                println("B%s".format(bs(i).length))
+      i += 1
+    }
+    if (statsOption.isDefined) {
+      statsOption.get.increment(f, opsTot)
+      statsOption.get.increment(g, opsTot)
+      statsOption.get.incrementSS(SS)
+      statsOption.get.incrementSD(SD)
+      statsOption.get.incrementDD(DD)
+    }
+    val res = GpiDenseVector(GpiBuffer(bs), vSparse, newDenseCount, A.threshold)
+    // ********
+    res.asInstanceOf[GpiAdaptiveVector[GpiAdaptiveVector[T4]]]
+    //    }
+
+  }
+  /**
+   * Matrix matrix multiplication
+   *
+   *  @tparam T1 LH matrix element type
+   *  @tparam T2 RH matrix element type
+   *  @tparam T3 output type of semiring multiplication
+   *  @tparam T4 output type of semiring addition
+   *  @param f semiring addition (commutative monoid with identity element)
+   *  @param g semiring multiplication (a monoid)
+   *  @param zero identity element for semiring addition
+   *  @param a the LH matrix
+   *  @param u the RH matrix
+   *  @param sparseValue determines sparsity for output of semiring multiplication
+   *  @param sparseValue determines sparsity for output of semiring addition
+   *
+   */
+  def gpi_m_times_m_opt_keep[@spec(Int) T1: ClassTag, @spec(Int) T2: ClassTag, @spec(Int) T3: ClassTag, @spec(Int) T4: ClassTag](
+      f: (T3, T4) => T4,
+      g: (T2, T1) => T3,
+      c: (T4, T4) => T4,
+      zero: T4,
+      a: GpiAdaptiveVector[GpiAdaptiveVector[T1]],
+      u: GpiAdaptiveVector[GpiAdaptiveVector[T2]],
+      statsOption: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[GpiAdaptiveVector[T4]] = {
+    var SS = 0
+    var SD = 0
+    var DD = 0
+    val stats = statsOption.get
+    var opsTot = 0
+    // ********
+//    val zero = 0
+    val Ain = a
+    val Bin = u
+    val vSparse = GpiAdaptiveVector.fillWithSparse(Ain.size)(zero)
+    val A = Ain.asInstanceOf[GpiDenseVector[GpiAdaptiveVector[T1]]]
+    val B = Bin.asInstanceOf[GpiDenseVector[GpiAdaptiveVector[T2]]]
+    val t0 = System.nanoTime()
+    val dbs = B.iseq
+    val dbsx = A.iseq
+    val kx = dbsx.length
+    //              val sparseValue = B.sparseValue
+    //            println("XXXXX: A.sparse: (%s,%s) >%s< >%s<".format(r,c, A(0).length, A.sparseValue.length))
+    //            println("XXXXX: B.sparse: (%s,%s) >%s< >%s<".format(r,c, B(0).length, B.sparseValue.length))
+    //              println("XXXXX: A.sparse: >%s<".format(A.sparseValue))
+    //              println("XXXXX: B.sparse: >%s<".format(B.sparseValue))
+    //              println("dbs.length:>%s<, dbsx.length:>%s<".format(dbs.length, dbsx.length)) //(6431,1024)
+    val bs = Array.ofDim[GpiAdaptiveVector[T4]](dbs.length)
+    var i = 0
+    val k = dbs.length
+    var newDenseCount = 0
+    while (i < k) {
+      // gpi_m_times_v
+      val u = dbs(i)
+      var ix = 0
+      var newDenseCountx = 0
+      val bsx = Array.ofDim[T4](dbsx.length) // careful, with this!
+      while (ix < kx) {
+        //  gpi_innerp
+        // gpi_inner_product
+        val v = dbsx(ix)
+        bsx(ix) =
+          (u, v) match {
+            case (uSparse: GpiSparseVector[T4], vSparse: GpiSparseVector[T4]) => {
+              SS += 1
+              // GpiBuffer.gpiZipSparseSparseToSparseReduce
+              val lenA = uSparse.rv._1.length
+              val lenB = vSparse.rv._1.length
+              if (lenA < lenB) {
+                var res = zero
+                var iiA = 0
+                var iiB = 0
+                while (iiA < lenA && iiB < lenB) {
+                  if (uSparse.rv._1(iiA) < vSparse.rv._1(iiB)) {
+                    iiA += 1
+                  } else if (uSparse.rv._1(iiA) > vSparse.rv._1(iiB)) {
+                    iiB += 1
+                  } else {
+                    res = f(g(uSparse.rv._2(iiA), vSparse.rv._2(iiB)), res)
+//                    res += uSparse.rv._2(iiA) * vSparse.rv._2(iiB)
+                    opsTot += 1
+                    iiA += 1
+                    iiB += 1
+                  }
+                }
+                //      (res, iiO)
+                res
+              } else {
+                var res = zero
+                var iiA = 0
+                var iiB = 0
+                while (iiA < lenA && iiB < lenB) {
+                  if (vSparse.rv._1(iiB) < uSparse.rv._1(iiA)) {
+                    iiB += 1
+                  } else if (vSparse.rv._1(iiB) > uSparse.rv._1(iiA)) {
+                    iiA += 1
+                  } else {
+                    res = f(g(uSparse.rv._2(iiA), vSparse.rv._2(iiB)), res)
+//                    res += uSparse.rv._2(iiA) * vSparse.rv._2(iiB)
+                    opsTot += 1
+                    iiA += 1
+                    iiB += 1
+                  }
+                }
+                //      (res, iiO)
+                res
+              }
+            }
+            case (uSparse: GpiSparseVector[T4], vDense: GpiDenseVector[T4]) => {
+              SD += 1
+              // GpiBuffer.gpiZipSparseDenseToSparseReduce
+              var res = zero
+              val lenA = uSparse.rv._1.length
+              //                        val lenB = vDense.iseq.length
+              var iiA = 0
+              //                        var iB = 0
+              while (iiA < lenA) {
+                res = f(g(uSparse.rv._2(iiA), vDense.iseq(uSparse.rv._1(iiA))), res)
+//                res += uSparse.rv._2(iiA) * vDense.iseq(uSparse.rv._1(iiA))
+                iiA += 1
+              }
+              opsTot += lenA
+              res
+            }
+            case (uDense: GpiDenseVector[T4], vSparse: GpiSparseVector[T4]) => {
+              SD += 1
+              // GpiBuffer.gpiZipDenseSparseToSparseReduce
+              var res = zero
+              //                        val lenA = uDense.iseq.length
+              val lenB = vSparse.rv._1.length
+              //                        var iA = 0
+              var iiB = 0
+              while (iiB < lenB) {
+                res = f(g(uDense.iseq(vSparse.rv._1(iiB)), vSparse.rv._2(iiB)), res)
+//                res += uDense.iseq(vSparse.rv._1(iiB)) * vSparse.rv._2(iiB)
+                iiB += 1
+              }
+              opsTot += lenB
+              res
+            }
+            case (uDense: GpiDenseVector[T4], vDense: GpiDenseVector[T4]) => {
+              DD += 1
+              // GpiBuffer.gpiZipDenseDenseToDenseReduce
+              var res = zero
+              val lenA = uDense.iseq.length
+              val lenB = vDense.iseq.length
+              //                        var iA = 0
+              //                        var iB = 0
+              var iC = 0
+              //    while (iC < len) {
+              while (iC < lenA) {
+                res = f(g(uDense.iseq(iC), vDense.iseq(iC)), res)
+//                res += uDense.iseq(iC) * vDense.iseq(iC)
+                iC += 1
+                //                          iA += 1
+                //                          iB += 1
+              }
+              opsTot += lenA
+              res
+            }
+          }
+        // ****
+        //                    bsx(ix) = zero // DEBUG turn off
+        if (bsx(ix) != zero) newDenseCountx += 1
+        ix += 1
+      }
+      bs(i) = // addded
+        if (newDenseCountx < dbsx.length * A.threshold) {
+          val x = GpiSparseVector(
+            GpiAdaptiveVector.toSparseBuffers(GpiBuffer(bsx), zero, newDenseCountx),
+            zero,
+            dbsx.length,
+            A.threshold)
+          //                    print("S(%s,%s)%s".format(r, c, kx))
+          x
+        } else {
+          val x = GpiDenseVector(GpiBuffer(bsx), zero, newDenseCountx, A.threshold)
+          //                    print("D%s".format(x.length))
+          x
+        }
+      //          bs(i) = vSparse // DEBUG turn off mTv
+      if (bs(i) != vSparse) newDenseCount += 1
+      //                println("B%s".format(bs(i).length))
+      i += 1
+    }
+    if (statsOption.isDefined) {
+      statsOption.get.increment(f, opsTot)
+      statsOption.get.increment(g, opsTot)
+      statsOption.get.incrementSS(SS)
+      statsOption.get.incrementSD(SD)
+      statsOption.get.incrementDD(DD)
+    }
+    val res = GpiDenseVector(GpiBuffer(bs), vSparse, newDenseCount, A.threshold)
+    // ********
+    res.asInstanceOf[GpiAdaptiveVector[GpiAdaptiveVector[T4]]]
+    //    }
+
+  }
+  /**
+   * Matrix matrix multiplication
+   *
+   *  @tparam T1 LH matrix element type
+   *  @tparam T2 RH matrix element type
+   *  @tparam T3 output type of semiring multiplication
+   *  @tparam T4 output type of semiring addition
+   *  @param f semiring addition (commutative monoid with identity element)
+   *  @param g semiring multiplication (a monoid)
+   *  @param zero identity element for semiring addition
+   *  @param a the LH matrix
+   *  @param u the RH matrix
+   *  @param sparseValue determines sparsity for output of semiring multiplication
+   *  @param sparseValue determines sparsity for output of semiring addition
+   *
+   */
+  def gpi_m_times_m_opt2[@spec(Int) T1: ClassTag, @spec(Int) T2: ClassTag, @spec(Int) T3: ClassTag, @spec(Int) T4: ClassTag](
+      f: (T3, T4) => T4,
+      g: (T2, T1) => T3,
+      c: (T4, T4) => T4,
+      zero: T4,
+      a: GpiAdaptiveVector[GpiAdaptiveVector[T1]],
+      u: GpiAdaptiveVector[GpiAdaptiveVector[T2]],
+      statsOption: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[GpiAdaptiveVector[T4]] = {
+    val stats = statsOption.get
+    var opsTot = 0
+    // ********
+    val zero = 0
+    val Ain = a
+    val Bin = u
+    val vSparse = GpiAdaptiveVector.fillWithSparse(Ain.size)(zero)
+    val A = Ain.asInstanceOf[GpiDenseVector[GpiAdaptiveVector[Int]]]
+    val B = Bin.asInstanceOf[GpiDenseVector[GpiAdaptiveVector[Int]]]
+    val t0 = System.nanoTime()
+    val dbs = B.iseq
+    val dbsx = A.iseq
+    val kx = dbsx.length
+    //              val sparseValue = B.sparseValue
+    //            println("XXXXX: A.sparse: (%s,%s) >%s< >%s<".format(r,c, A(0).length, A.sparseValue.length))
+    //            println("XXXXX: B.sparse: (%s,%s) >%s< >%s<".format(r,c, B(0).length, B.sparseValue.length))
+    //              println("XXXXX: A.sparse: >%s<".format(A.sparseValue))
+    //              println("XXXXX: B.sparse: >%s<".format(B.sparseValue))
+    //              println("dbs.length:>%s<, dbsx.length:>%s<".format(dbs.length, dbsx.length)) //(6431,1024)
+    val bs = Array.ofDim[GpiAdaptiveVector[Int]](dbs.length)
+    var i = 0
+    val k = dbs.length
+    var newDenseCount = 0
+    while (i < k) {
+      // gpi_m_times_v
+      val u = dbs(i)
+      var ix = 0
+      var newDenseCountx = 0
+      val bsx = Array.ofDim[Int](dbsx.length) // careful, with this!
+      while (ix < kx) {
+        //  gpi_innerp
+        // gpi_inner_product
+        val v = dbsx(ix)
+        bsx(ix) =
+          (u, v) match {
+            case (uSparse: GpiSparseVector[Int], vSparse: GpiSparseVector[Int]) => {
+              // GpiBuffer.gpiZipSparseSparseToSparseReduce
+              val lenA = uSparse.rv._1.length
+              val lenB = vSparse.rv._1.length
+              if (lenA < lenB) {
+                var res = zero
+                var iiA = 0
+                var iiB = 0
+                while (iiA < lenA && iiB < lenB) {
+                  if (uSparse.rv._1(iiA) < vSparse.rv._1(iiB)) {
+                    iiA += 1
+                  } else if (uSparse.rv._1(iiA) > vSparse.rv._1(iiB)) {
+                    iiB += 1
+                  } else {
+                    //          res = f(g(uSparse.rv._2(iiA), vSparse.rv._2(iiB)), res)
+                    res += uSparse.rv._2(iiA) * vSparse.rv._2(iiB)
+                    opsTot += 1
+                    iiA += 1
+                    iiB += 1
+                  }
+                }
+                //      (res, iiO)
+                res
+              } else {
+                var res = zero
+                var iiA = 0
+                var iiB = 0
+                while (iiA < lenA && iiB < lenB) {
+                  if (vSparse.rv._1(iiB) < uSparse.rv._1(iiA)) {
+                    iiB += 1
+                  } else if (vSparse.rv._1(iiB) > uSparse.rv._1(iiA)) {
+                    iiA += 1
+                  } else {
+                    //          res = f(g(uSparse.rv._2(iiA), vSparse.rv._2(iiB)), res)
+                    res += uSparse.rv._2(iiA) * vSparse.rv._2(iiB)
+                    opsTot += 1
+                    iiA += 1
+                    iiB += 1
+                  }
+                }
+                //      (res, iiO)
+                res
+              }
+            }
+            case (uSparse: GpiSparseVector[Int], vDense: GpiDenseVector[Int]) => {
+              // GpiBuffer.gpiZipSparseDenseToSparseReduce
+              var res = zero
+              val lenA = uSparse.rv._1.length
+              //                        val lenB = vDense.iseq.length
+              var iiA = 0
+              //                        var iB = 0
+              while (iiA < lenA) {
+                //      res = f(g(uSparse.rv._2(iiA), vDense.iseq(uSparse.rv._1(iiA))), res)
+                res += uSparse.rv._2(iiA) * vDense.iseq(uSparse.rv._1(iiA))
+                iiA += 1
+              }
+              opsTot += lenA
+              res
+            }
+            case (uDense: GpiDenseVector[Int], vSparse: GpiSparseVector[Int]) => {
+              // GpiBuffer.gpiZipDenseSparseToSparseReduce
+              var res = zero
+              //                        val lenA = uDense.iseq.length
+              val lenB = vSparse.rv._1.length
+              //                        var iA = 0
+              var iiB = 0
+              while (iiB < lenB) {
+                //      res = f(g(uDense.iseq(vSparse.rv._1(iiB)), vSparse.rv._2(iiB)), res)
+                res += uDense.iseq(vSparse.rv._1(iiB)) * vSparse.rv._2(iiB)
+                iiB += 1
+              }
+              opsTot += lenB
+              res
+            }
+            case (uDense: GpiDenseVector[Int], vDense: GpiDenseVector[Int]) => {
+              // GpiBuffer.gpiZipDenseDenseToDenseReduce
+              var res = zero
+              val lenA = uDense.iseq.length
+              val lenB = vDense.iseq.length
+              //                        var iA = 0
+              //                        var iB = 0
+              var iC = 0
+              //    while (iC < len) {
+              while (iC < lenA) {
+                //      res = f(g(uDense.iseq(iA), vDense.iseq(iB)), res)
+                res += uDense.iseq(iC) * vDense.iseq(iC)
+                iC += 1
+                //                          iA += 1
+                //                          iB += 1
+              }
+              opsTot += lenA
+              res
+            }
+          }
+        // ****
+        //                    bsx(ix) = zero // DEBUG turn off
+        if (bsx(ix) != zero) newDenseCountx += 1
+        ix += 1
+      }
+      bs(i) = // addded
+        if (newDenseCountx < dbsx.length * A.threshold) {
+          val x = GpiSparseVector(
+            GpiAdaptiveVector.toSparseBuffers(GpiBuffer(bsx), zero, newDenseCountx),
+            zero,
+            dbsx.length,
+            A.threshold)
+          //                    print("S(%s,%s)%s".format(r, c, kx))
+          x
+        } else {
+          val x = GpiDenseVector(GpiBuffer(bsx), zero, newDenseCountx, A.threshold)
+          //                    print("D%s".format(x.length))
+          x
+        }
+      //          bs(i) = vSparse // DEBUG turn off mTv
+      if (bs(i) != vSparse) newDenseCount += 1
+      //                println("B%s".format(bs(i).length))
+      i += 1
+    }
+    if (statsOption.isDefined) {
+      statsOption.get.increment(f, opsTot)
+      statsOption.get.increment(g, opsTot)
+    }
+    val res = GpiDenseVector(GpiBuffer(bs), vSparse, newDenseCount, A.threshold)
+    // ********
+    res.asInstanceOf[GpiAdaptiveVector[GpiAdaptiveVector[T4]]]
+    //    }
+
+  }
+  /**
+   * Matrix matrix multiplication
+   *
+   *  @tparam T1 LH matrix element type
+   *  @tparam T2 RH matrix element type
+   *  @tparam T3 output type of semiring multiplication
+   *  @tparam T4 output type of semiring addition
+   *  @param f semiring addition (commutative monoid with identity element)
+   *  @param g semiring multiplication (a monoid)
+   *  @param zero identity element for semiring addition
+   *  @param a the LH matrix
+   *  @param u the RH matrix
+   *  @param sparseValue determines sparsity for output of semiring multiplication
+   *  @param sparseValue determines sparsity for output of semiring addition
+   *
+   */
   def gpi_m_times_m[@spec(Int) T1: ClassTag,
                     @spec(Int) T2: ClassTag,
                     @spec(Int) T3: ClassTag,

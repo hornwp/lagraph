@@ -34,6 +34,13 @@ final class GpiBuffer[@spec(Int) A: ClassTag](val elems: Array[A], val length: I
     this(elems, elems.length)
   }
 
+  // TODO keep this?
+  lazy val asmap = {
+    val occ = new scala.collection.mutable.HashMap[A, Int] { override def default(k: A) = -1 }
+      for (y <- elems.zipWithIndex) occ(y._1) = y._2
+      occ
+  }
+
   override def equals(o: Any): Boolean = o match {
     case that: GpiBuffer[A] => {
       if (this.hashCode == that.hashCode) {
@@ -292,7 +299,7 @@ object GpiBuffer {
       dbs: GpiBuffer[B],
       denseCount: Int,
       sparseValue: B): (GpiBuffer[Int], GpiBuffer[B]) = {
-    val t0 = System.nanoTime()
+//    val t0 = System.nanoTime()
 
     val rbs = Array.ofDim[Int](denseCount)
     val vbs = Array.ofDim[B](denseCount)
@@ -306,8 +313,8 @@ object GpiBuffer {
       }
       i += 1
     }
-    val t1 = System.nanoTime()
-    val t01 = LagUtils.tt(t0, t1)
+//    val t1 = System.nanoTime()
+//    val t01 = LagUtils.tt(t0, t1)
     // x    println("GpiBuffer: rvDenseBufferToSparseBuffer: time: >%.3f< s".format(t01))
     (GpiBuffer(rbs), GpiBuffer(vbs))
   }
@@ -529,6 +536,13 @@ object GpiBuffer {
       ((GpiBuffer(rvCr, iiC), GpiBuffer(rvCv, iiC)), iiC, iiO)
     }
   }
+  
+
+//  lazy val asmap = {
+//    val occ = new scala.collection.mutable.HashMap[A, Int] { override def default(k: A) = -1 }
+//      for (y <- elems.zipWithIndex) occ(y._1) = y._2
+//      occ
+//  }
 
   def gpiZipSparseSparseToSparseReduce[
         @spec(Int) A: ClassTag,
@@ -542,6 +556,27 @@ object GpiBuffer {
       f: (C, D) => D,
       g: (A, B) => C,
       c: (D, D) => D): (D, Int) = {
+    
+//    var res = zero
+//    var iiO = 0
+//    if (rvA._1.length < rvB._1.length) {
+//      for (x <- rvA._1.elems.zipWithIndex) {
+//        val ox = rvB._1.asmap(x._1)
+//        if (ox > -1) {
+//          res = f(g(rvA._2.elems(x._2), rvB._2.elems(ox)), res)
+//          iiO += 1
+//        }
+//      }
+//    } else {
+//      for (x <- rvB._1.elems.zipWithIndex) {
+//        val ox = rvA._1.asmap(x._1)
+//        if (ox > -1) {
+//          res = f(g(rvA._2.elems(ox), rvB._2.elems(x._2)), res)
+//          iiO += 1
+//        }
+//      }
+//    }
+//    (res, iiO)
     val lenA = rvA._1.length
     val lenB = rvB._1.length
     if (lenA < lenB) {

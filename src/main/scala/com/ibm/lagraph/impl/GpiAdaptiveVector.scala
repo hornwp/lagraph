@@ -55,11 +55,11 @@ sealed protected trait AdaptiveVectorToBuffer {
   def toSparseBuffers[VS: ClassTag](iseq: GpiBuffer[VS],
                                     sparseValue: VS,
                                     denseCount: Int): (GpiBuffer[Int], GpiBuffer[VS]) = {
-    val t0 = System.nanoTime()
+//    val t0 = System.nanoTime()
     val res =
       GpiBuffer.rvDenseBufferToSparseBuffer(iseq, denseCount, sparseValue)
-    val t1 = System.nanoTime()
-    val t01 = LagUtils.tt(t0, t1)
+//    val t1 = System.nanoTime()
+//    val t01 = LagUtils.tt(t0, t1)
     // x    println("AdaptiveVector: toSparseBuffers: stop: time: >%.3f< s".format(t01))
     res
   }
@@ -1005,6 +1005,9 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
       stats("mul") = 0L
       stats("cmp") = 0L
       stats("other") = 0L
+      stats("SS") = 0L
+      stats("SD") = 0L
+      stats("DD") = 0L
     }
 
     // http://stackoverflow.com/questions/2657940/
@@ -1020,6 +1023,33 @@ object GpiAdaptiveVector extends AdaptiveVectorToBuffer with Serializable {
           incrementOther(value)
         }
       }
+    }
+
+    // SS
+    stats("SS") = 0L
+    def getSS: Long = {
+      get[Long]("SS")
+    }
+    def incrementSS(value: Long): Unit = {
+      stats("SS") = get[Long]("SS") + value
+    }
+
+    // SD
+    stats("SD") = 0L
+    def getSD: Long = {
+      get[Long]("SD")
+    }
+    def incrementSD(value: Long): Unit = {
+      stats("SD") = get[Long]("SD") + value
+    }
+
+    // DD
+    stats("DD") = 0L
+    def getDD: Long = {
+      get[Long]("DD")
+    }
+    def incrementDD(value: Long): Unit = {
+      stats("DD") = get[Long]("DD") + value
     }
 
     // add
@@ -1132,7 +1162,8 @@ final case class GpiDenseVector[VS: ClassTag](iseq: GpiBuffer[VS],
 }
 
 }
-private case object GpiSparseVector extends AdaptiveVectorToBuffer {}
+// private case object ? TODO
+case object GpiSparseVector extends AdaptiveVectorToBuffer {}
 final case class GpiSparseVector[VS: ClassTag](rv: (GpiBuffer[Int], GpiBuffer[VS]),
                                                override val sparseValue: VS,
                                                override val size: Int,

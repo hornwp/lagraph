@@ -39,7 +39,11 @@ import com.ibm.lagraph.impl.{
   LagDstrVector,
   LagDstrMatrix
 }
-
+import com.ibm.lagraph.impl.{
+  GpiDenseVector,
+  GpiSparseVector,
+  GpiBuffer
+}
 /**
   * The Distributed LAG context
   *
@@ -946,20 +950,22 @@ final case class LagDstrContext(@transient sc: SparkContext,
       //                maa.dstrBmat.sparseValue))
     }
   }
-  private[lagraph] override def mDm[T: ClassTag](sr: LagSemiring[T],
-                                                 ma: LagMatrix[T],
-                                                 mb: LagMatrix[T]): LagMatrix[T] = (ma, mb) match {
+  private[lagraph] override def mDm[T: ClassTag](
+      sr: LagSemiring[T],
+      ma: LagMatrix[T],
+      mb: LagMatrix[T]): LagMatrix[T] = (ma, mb) match {
     case (maa: LagDstrMatrix[T], mba: LagDstrMatrix[T]) => {
-      require(maa.dstrBmat.sparseValue == mba.dstrBmat.sparseValue,
-          "mDm does not currently support disparate sparsities")
+      require(
+        maa.dstrBmat.sparseValue == mba.dstrBmat.sparseValue,
+        "mDm does not currently support disparate sparsities")
       val a_blocker = maa.dstrBmat.blocker
       val b_blocker = mba.dstrBmat.blocker
       require(a_blocker.clipN == b_blocker.clipN, "a.clipN: >%s< != b.clipN: >%s<)".format(
-          a_blocker.clipN, b_blocker.clipN))
+        a_blocker.clipN, b_blocker.clipN))
       val clipN = a_blocker.clipN
       require(a_blocker.ncol == b_blocker.ncol, "(%s,%s) d (%s,%s) not supported".format(
-          a_blocker.nrow, a_blocker.ncol,
-          b_blocker.nrow, b_blocker.ncol))
+        a_blocker.nrow, a_blocker.ncol,
+        b_blocker.nrow, b_blocker.ncol))
       val msSparse = maa.dstrBmat.sparseValue
       val hcd = this
       val dstr = hcd.dstr
@@ -986,22 +992,22 @@ final case class LagDstrContext(@transient sc: SparkContext,
       val Partial = coordRdd.cartesian(coordRdd).map(initPartial).partitionBy(pbPartitioner)
       // ********
       // top level
-      def recurse(contributingIndex: Int,
-                  rPartial: RDD[((Int, Int), GpiAdaptiveVector[GpiAdaptiveVector[T]])],
-                  rA: RDD[((Int, Int), GpiBmat[T])],
-                  rB: RDD[((Int, Int), GpiBmat[T])])
-        : RDD[((Int, Int), GpiAdaptiveVector[GpiAdaptiveVector[T]])] = 
+      def recurse(
+          contributingIndex: Int,
+          rPartial: RDD[((Int, Int), GpiAdaptiveVector[GpiAdaptiveVector[T]])],
+          rA: RDD[((Int, Int), GpiBmat[T])],
+          rB: RDD[((Int, Int), GpiBmat[T])]): RDD[((Int, Int), GpiAdaptiveVector[GpiAdaptiveVector[T]])] =
         if (contributingIndex == clipnp1) {
           val rp = rPartial.cache()
           rp.count
           rp
-        }
-        else {
+        } else {
           def selectA(kv: ((Int, Int), GpiBmat[T])): List[((Int, Int), GpiBmat[T])] = {
             val (r, c) = kv._1
             val gxa = kv._2
-            def selectIt(rd: Int,
-                         dl: List[((Int, Int), GpiBmat[T])]): List[((Int, Int), GpiBmat[T])] =
+            def selectIt(
+                rd: Int,
+                dl: List[((Int, Int), GpiBmat[T])]): List[((Int, Int), GpiBmat[T])] =
               if (rd == clipnp1) dl else selectIt(rd + 1, ((rd, r), gxa) :: dl)
             val empty = List[((Int, Int), GpiBmat[T])]()
             if (c == contributingIndex) selectIt(0, empty) else empty
@@ -1009,8 +1015,9 @@ final case class LagDstrContext(@transient sc: SparkContext,
           def selectB(kv: ((Int, Int), GpiBmat[T])): List[((Int, Int), GpiBmat[T])] = {
             val (c, r) = kv._1
             val gxa = kv._2
-            def selectIt(rd: Int,
-                         dl: List[((Int, Int), GpiBmat[T])]): List[((Int, Int), GpiBmat[T])] =
+            def selectIt(
+                rd: Int,
+                dl: List[((Int, Int), GpiBmat[T])]): List[((Int, Int), GpiBmat[T])] =
               if (rd == clipnp1) dl else selectIt(rd + 1, ((c, rd), gxa) :: dl)
             val empty = List[((Int, Int), GpiBmat[T])]()
             if (r == contributingIndex) selectIt(0, empty) else empty
@@ -1024,50 +1031,121 @@ final case class LagDstrContext(@transient sc: SparkContext,
           // calculation functor
           val stats = GpiAdaptiveVector.Stat.Stat()
           def calculate(
-              kv: ((Int, Int),
-                   (Iterable[GpiAdaptiveVector[GpiAdaptiveVector[T]]],
-                    Iterable[GpiBmat[T]],
-                    Iterable[GpiBmat[T]]))) = {
-            val t0 = System.nanoTime()
-            val t0Add = stats.getAdd
-            val t0Mul = stats.getMul
+              kv: ((Int, Int),(Iterable[GpiAdaptiveVector[GpiAdaptiveVector[T]]], Iterable[GpiBmat[T]], Iterable[GpiBmat[T]]))): ((Int, Int), GpiAdaptiveVector[GpiAdaptiveVector[T]]) = {
             val r = kv._1._1
             val c = kv._1._2
             val cPartial = kv._2._1.iterator.next()
             val cAa = kv._2._2.iterator.next().a
             val cBa = kv._2._3.iterator.next().a
-            val iPartial = GpiOps.gpi_m_times_m(sr.addition,
-                                                sr.multiplication,
-                                                sr.addition,
-                                                sr.zero,
-                                                cAa,
-                                                cBa,
-                                                Option(stats))
-            //            val updatedPartial = cPartial // DEBUG
-            val t1 = System.nanoTime()
-            val t01 = (t1 - t0) * 1.0e-9
-            val t01Add = stats.getAdd - t0Add
-            val t01Mul = stats.getMul - t0Mul
-            val mflops = (t01Add + t01Mul).toDouble / t01 * 1.0e-6
 
-            //    println ("mTm: t: >%.3f<, mflops: >%.3f<, adds: >(%s,%s), muls: >(%s,%s)".format(
-            //        t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul)))
-            val updatedPartial = GpiOps.gpi_zip(
-              GpiOps.gpi_zip(sr.addition, _: GpiAdaptiveVector[T], _: GpiAdaptiveVector[T]),
-              iPartial,
-              cPartial)
-            
-            // for profiling
-            println(("mDm: updatedPartial for (r,c): >( %s , %s ), partition: > %s <, contributingIndex: > %s <;" +
-              "mTm: t: > %.3f <, mflops: > %.3f <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
-              "zip: t: > %.3f <").format(
-                r, c, pbPartitioner.getPartition(Tuple2(r,c)), contributingIndex,
-                t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul),
-                LagUtils.tt(t1, System.nanoTime())))
-            //            updatedPartial(1) match {
-            //              case _: com.ibm.lagraph.impl.GpiDenseVector[_] => println("DENSE")
-            //              case _: com.ibm.lagraph.impl.GpiSparseVector[_] => println("SPARSE")
-            //            }
+//            val updatedPartial = if (true) {
+            val updatedPartial02 = {
+              val t0 = System.nanoTime()
+              val t0Add = stats.getAdd
+              val t0Mul = stats.getMul
+              val iPartial = GpiOps.gpi_m_times_m(
+                sr.addition,
+                sr.multiplication,
+                sr.addition,
+                sr.zero,
+                cAa,
+                cBa,
+                Option(stats))
+              val t1 = System.nanoTime()
+              val t01 = t1 - t0
+              val t01Add = stats.getAdd - t0Add
+              val t01Mul = stats.getMul - t0Mul
+              val mflops = (t01Add + t01Mul).toDouble / t01.toDouble
+              //    println ("mTm: t: >%.3f<, mflops: >%.3f<, adds: >(%s,%s), muls: >(%s,%s)".format(
+              //        t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul)))
+              val updatedPartial = GpiOps.gpi_zip(
+                GpiOps.gpi_zip(sr.addition, _: GpiAdaptiveVector[T], _: GpiAdaptiveVector[T]),
+                iPartial,
+                cPartial)
+
+              val t2 = System.nanoTime()
+              val t12 = t2 - t1
+              // for profiling
+              println(("mDm: A: updatedPartial for (r,c): >( %s , %s ), partition: > %s <, contributingIndex: > %s <;" +
+                "mTm: t: > %s <, mflops: > %6.3e <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
+                "zip: t: > %s <").format(
+                  r, c, pbPartitioner.getPartition(Tuple2(r, c)), contributingIndex,
+                  t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul),
+                  t12))
+              // ****
+              // begin test
+              if (true) {
+                // simplest multiply
+                val t0 = System.nanoTime()
+                var sum = 0
+                var i = 0
+                while (i < t01Mul) {
+                  sum = sum + i * 2
+                  i = i + 1
+                }
+                val t1 = System.nanoTime()
+                val t01 = (t1 - t0)
+                val mflopsi = (t01Add + t01Mul).toDouble / t01.toDouble
+                println("mXm: B: for (r,c): >( %s , %s ), mFlop ratio : >%.5f<".format(r, c, mflops / mflopsi))
+                println(("mXm: B: updatedPartial for (r,c): >( %s , %s ), partition: > %s <, contributingIndex: > %s <;" +
+                  "mTm: t: > %s <, mflops: > %6.3e <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
+                  "zip: t: > %s <").format(
+                    r, c, pbPartitioner.getPartition(Tuple2(r, c)), contributingIndex,
+                    t01, mflopsi, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul),
+                    t12))
+              }
+              updatedPartial
+            }
+////            } else { //****//
+//            }
+            val updatedPartial = {
+              val t0 = System.nanoTime()
+              val t0Add = stats.getAdd
+              val t0Mul = stats.getMul
+              val t0SS = stats.getSS
+              val t0SD = stats.getSD
+              val t0DD = stats.getDD
+              val iPartial = GpiOps.gpi_m_times_m_opt(
+                sr.addition,
+                sr.multiplication,
+                sr.addition,
+                sr.zero,
+                cAa,
+                cBa,
+                Option(stats))
+              val t1 = System.nanoTime()
+              val t01 = t1 - t0
+              val t01Add = stats.getAdd - t0Add
+              val t01Mul = stats.getMul - t0Mul
+              val mflops = (t01Add + t01Mul).toDouble / t01.toDouble
+              //    println ("mTm: t: >%.3f<, mflops: >%.3f<, adds: >(%s,%s), muls: >(%s,%s)".format(
+              //        t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul)))
+              val updatedPartial = GpiOps.gpi_zip(
+                GpiOps.gpi_zip(sr.addition, _: GpiAdaptiveVector[T], _: GpiAdaptiveVector[T]),
+                iPartial,
+                cPartial)
+
+              val t2 = System.nanoTime()
+              val t12 = t2 - t1
+              // for profiling
+              println(("mDm: C: updatedPartial for (r,c): >( %s , %s ), partition: > %s <, contributingIndex: > %s <;" +
+                "mTm: t: > %s <, mflops: > %6.3e <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
+                "zip: t: > %s <").format(
+                  r, c, pbPartitioner.getPartition(Tuple2(r, c)), contributingIndex,
+                  t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul),
+                  t12))
+              val t01SS = stats.getSS - t0SS
+              val t01SD = stats.getSD - t0SD
+              val t01DD = stats.getDD - t0DD
+              println("mDm: SS: >(%s,%s)<, SD: >(%s,%s)<, DD: >(%s,%s)<".format(
+                  t01SS,
+                  LagUtils.pow2Bound(t01SS),
+                  t01SD,
+                  LagUtils.pow2Bound(t01SD),
+                  t01DD,
+                  LagUtils.pow2Bound(t01DD)))
+              updatedPartial
+            }
             ((r, c), updatedPartial)
           }
           //          val nextPartialA = rPartial.cogroup(sra, srb)//.cache()
@@ -1113,15 +1191,15 @@ final case class LagDstrContext(@transient sc: SparkContext,
         List(Tuple2(Tuple2(rcb._1._1, rcb._1._2), GpiBmat(rcb._2))).toIterator
       }
       LagDstrMatrix(
-          hcd,
-          rcvRdd,
-          GpiDstrBmat(
-              A.dstr,
-              partial_blocker,
-              transposedResult.mapPartitions(perblock, preservesPartitioning = true),
-              partial_blocker.nrow,
-              partial_blocker.ncol,
-              msSparse))
+        hcd,
+        rcvRdd,
+        GpiDstrBmat(
+          A.dstr,
+          partial_blocker,
+          transposedResult.mapPartitions(perblock, preservesPartitioning = true),
+          partial_blocker.nrow,
+          partial_blocker.ncol,
+          msSparse))
 
       //Dhcd.mFromRcvRdd((partial_blocker.ncol, partial_blocker.nrow), rcvRdd.map {
       //D  case (k, v) => ((k._2, k._1), v) }, msSparse)
@@ -1136,20 +1214,21 @@ final case class LagDstrContext(@transient sc: SparkContext,
   }
   // Hadagard ".multiplication"
   private[lagraph] override def mHm[T: ClassTag](
-                                                 // // TODO maybe sr OR maybe f: (T1, T2) => T3?
-                                                 //    f: (T, T) => T,
-                                                 sr: LagSemiring[T],
-                                                 m: LagMatrix[T],
-                                                 n: LagMatrix[T]): LagMatrix[T] = {
+      // // TODO maybe sr OR maybe f: (T1, T2) => T3?
+      //    f: (T, T) => T,
+      sr: LagSemiring[T],
+      m: LagMatrix[T],
+      n: LagMatrix[T]): LagMatrix[T] = {
     mZip(sr.multiplication, m, n)
     //    mZip(f, m, n)
   }
   // OuterProduct
-  private[lagraph] def mOp[T: ClassTag](f: LagSemiring[T],
-                                        m: LagMatrix[T],
-                                        mCol: Long,
-                                        n: LagMatrix[T],
-                                        nRow: Long): LagMatrix[T] =
+  private[lagraph] def mOp[T: ClassTag](
+      f: LagSemiring[T],
+      m: LagMatrix[T],
+      mCol: Long,
+      n: LagMatrix[T],
+      nRow: Long): LagMatrix[T] =
     (m, n) match {
       case (ma: LagDstrMatrix[T], na: LagDstrMatrix[T]) => {
         assert(ma.dstrBmat.sparseValue == na.dstrBmat.sparseValue)
@@ -1187,8 +1266,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
         val at = GpiSparseRowMatrix.transpose(bmata.a)
         if (rcb._1._1 == rcb._1._2) {
           List(Tuple2(Tuple2(rcb._1._1, rcb._1._2), GpiBmat(at))).toIterator
-        }
-        else {
+        } else {
           List(Tuple2(Tuple2(rcb._1._2, rcb._1._1), GpiBmat(at))).toIterator
         }
         //          }
@@ -1198,14 +1276,16 @@ final case class LagDstrContext(@transient sc: SparkContext,
       val matRdd = ma.dstrBmat.matRdd
         .mapPartitions(perblock, preservesPartitioning = false)
       val blocker = GpiDstrMatrixBlocker((ma.size._2, ma.size._1), ma.dstrBmat.dstr.nblockRequested)
-      LagDstrMatrix(this,
-                    newMmap,
-                    GpiDstrBmat(ma.dstrBmat.dstr,
-                                blocker,
-                                matRdd,
-                                ma.dstrBmat.ncol,
-                                ma.dstrBmat.nrow,
-                                ma.dstrBmat.sparseValue))
+      LagDstrMatrix(
+        this,
+        newMmap,
+        GpiDstrBmat(
+          ma.dstrBmat.dstr,
+          blocker,
+          matRdd,
+          ma.dstrBmat.ncol,
+          ma.dstrBmat.nrow,
+          ma.dstrBmat.sparseValue))
     }
   }
   private[lagraph] def vFromMrow[T: ClassTag](m: LagMatrix[T], mRow: Long): LagVector[T] =
