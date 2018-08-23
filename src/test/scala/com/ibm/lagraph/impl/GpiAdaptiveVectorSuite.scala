@@ -572,5 +572,192 @@ object GpiAdaptiveVectorSuite {
       case _ => throw new RuntimeException("checkDenseVector: no match")
     }
   }
+  // ********
+  def main(args: Array[String]): Unit = {
+    println("Hello world")
+    val sparse = 0
+    val v1 =
+      GpiAdaptiveVector.fromSeq(Vector(1, 0, 0, 0, 0, 0, 0, 0, 0, 0), sparse)
+    val v2 =
+      GpiAdaptiveVector.fromSeq(Vector(1, 0, 1, 1, 1, 1, 1, 1, 1, 1), sparse)
+    val v3 =
+      GpiAdaptiveVector.fromSeq(Vector(0, 1, 0, 0, 0, 0, 0, 0, 0, 0), sparse)
+    val vSparse = GpiAdaptiveVector.fillWithSparse(10)(0)
+    val A =
+      GpiAdaptiveVector.fromSeq(Vector(
+          v1,
+          v2,
+          v1,
+          v1,
+          v1,
+          v1,
+          v1,
+          v1,
+          v1,
+          v1
+          ), vSparse)
+    val B =
+      GpiAdaptiveVector.fromSeq(Vector(
+          v3,
+          v2,
+          v3,
+          v3,
+          v3,
+          v3,
+          v3,
+          v3
+          ), vSparse)
+
+    import scala.reflect.ClassTag
+    //    def castToInt[T](u: GpiAdaptiveVector[T]): GpiAdaptiveVector[T]
+    def testPerformance[T: ClassTag](
+        Ain: GpiAdaptiveVector[GpiAdaptiveVector[T]],
+        Bin: GpiAdaptiveVector[GpiAdaptiveVector[T]]): GpiAdaptiveVector[GpiAdaptiveVector[Int]] = {
+      // ********
+      val zero = 0
+      val vSparse = GpiAdaptiveVector.fillWithSparse(Ain.size)(zero)
+      val A = Ain.asInstanceOf[GpiDenseVector[GpiAdaptiveVector[Int]]]
+      val B = Bin.asInstanceOf[GpiDenseVector[GpiAdaptiveVector[Int]]]
+      val dbs = B.iseq
+      val sparseValue = B.sparseValue
+      val bs = Array.ofDim[GpiAdaptiveVector[Int]](dbs.length)
+      var i = 0
+      val k = dbs.length
+      var newDenseCount = 0
+      while (i < k) {
+        // gpi_m_times_v
+        val dbsx = A.iseq
+        val bsx = Array.ofDim[Int](dbsx.length)
+        var ix = 0
+        val kx = dbsx.length
+        var newDenseCountx = 0
+        while (ix < kx) {
+          //  gpi_innerp
+          // gpi_inner_product
+          val u = dbs(i)
+          val v = dbsx(ix)
+          bsx(ix) =
+            (u, v) match {
+              case (uSparse: GpiSparseVector[Int], vSparse: GpiSparseVector[Int]) => {
+                // GpiBuffer.gpiZipSparseSparseToSparseReduce
+                val lenA = uSparse.rv._1.length
+                val lenB = vSparse.rv._1.length
+                if (lenA < lenB) {
+                  var res = zero
+                  var iiA = 0
+                  var iiB = 0
+//                  var iiO = 0
+                  while (iiA < lenA && iiB < lenB) {
+                    if (uSparse.rv._1(iiA) < vSparse.rv._1(iiB)) {
+                      iiA += 1
+                    } else if (uSparse.rv._1(iiA) > vSparse.rv._1(iiB)) {
+                      iiB += 1
+                    } else {
+                      //          res = f(g(uSparse.rv._2(iiA), vSparse.rv._2(iiB)), res)
+                      res += uSparse.rv._2(iiA) * vSparse.rv._2(iiB)
+//                      iiO += 1
+                      iiA += 1
+                      iiB += 1
+                    }
+                  }
+                  //      (res, iiO)
+                  res
+                } else {
+                  var res = zero
+                  var iiA = 0
+                  var iiB = 0
+//                  var iiO = 0
+                  while (iiA < lenA && iiB < lenB) {
+                    if (vSparse.rv._1(iiB) < uSparse.rv._1(iiA)) {
+                      iiB += 1
+                    } else if (vSparse.rv._1(iiB) > uSparse.rv._1(iiA)) {
+                      iiA += 1
+                    } else {
+                      //          res = f(g(uSparse.rv._2(iiA), vSparse.rv._2(iiB)), res)
+                      res += uSparse.rv._2(iiA) * vSparse.rv._2(iiB)
+//                      iiO += 1
+                      iiA += 1
+                      iiB += 1
+                    }
+                  }
+                  //      (res, iiO)
+                  res
+                }
+              }
+              case (uSparse: GpiSparseVector[Int], vDense: GpiDenseVector[Int]) => {
+                // GpiBuffer.gpiZipSparseDenseToSparseReduce
+                var res = zero
+                val lenA = uSparse.rv._1.length
+                val lenB = vDense.iseq.length
+                var iiA = 0
+                var iB = 0
+                while (iiA < lenA) {
+                  //      res = f(g(uSparse.rv._2(iiA), vDense.iseq(uSparse.rv._1(iiA))), res)
+                  res += uSparse.rv._2(iiA) * vDense.iseq(uSparse.rv._1(iiA))
+                  iiA += 1
+                }
+                //    (res, lenA)
+                res
+              }
+              case (uDense: GpiDenseVector[Int], vSparse: GpiSparseVector[Int]) => {
+                // GpiBuffer.gpiZipDenseSparseToSparseReduce
+                var res = zero
+                val lenA = uDense.iseq.length
+                val lenB = vSparse.rv._1.length
+                var iA = 0
+                var iiB = 0
+                while (iiB < lenB) {
+                  //      res = f(g(uDense.iseq(vSparse.rv._1(iiB)), vSparse.rv._2(iiB)), res)
+                  res += uDense.iseq(vSparse.rv._1(iiB)) * vSparse.rv._2(iiB)
+                  iiB += 1
+                }
+                //    (res, lenB)
+                res
+              }
+              case (uDense: GpiDenseVector[Int], vDense: GpiDenseVector[Int]) => {
+                // GpiBuffer.gpiZipDenseDenseToDenseReduce
+                var res = zero
+                val lenA = uDense.iseq.length
+                val lenB = vDense.iseq.length
+                var iA = 0
+                var iB = 0
+                var iC = 0
+                //    while (iC < len) {
+                while (iC < lenA) {
+                  //      res = f(g(uDense.iseq(iA), vDense.iseq(iB)), res)
+                  res += uDense.iseq(iA) * vDense.iseq(iB)
+                  iC += 1
+                  iA += 1
+                  iB += 1
+                }
+                //    (res, len)
+                res
+              }
+            }
+          // ****
+//                    bsx(ix) = zero // DEBUG turn off
+          if (bsx(ix) != zero) newDenseCountx += 1
+          ix += 1
+        }
+        bs(i) = // addded
+        if (newDenseCountx < dbsx.length * A.threshold) {
+          GpiSparseVector(
+            GpiAdaptiveVector.toSparseBuffers(GpiBuffer(bsx), zero, newDenseCountx),
+            zero,
+            dbsx.length,
+            A.threshold)
+        } else {
+          GpiDenseVector(GpiBuffer(bsx), zero, newDenseCountx, A.threshold)
+        }
+        //          bs(i) = vSparse // DEBUG turn off mTv
+        if (bs(i) != vSparse) newDenseCount += 1
+        i += 1
+      }
+      GpiDenseVector(GpiBuffer(bs), B.sparseValue, newDenseCount, A.threshold)
+      // ********
+    }
+    val C = testPerformance(A, B)
+    println(C.size, C(1).size, C)
+  }
 }
 // scalastyle:on println

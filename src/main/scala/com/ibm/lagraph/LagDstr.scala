@@ -1039,7 +1039,7 @@ final case class LagDstrContext(@transient sc: SparkContext,
             val cBa = kv._2._3.iterator.next().a
 
 //            val updatedPartial = if (true) {
-            val updatedPartial02 = {
+            val updatedPartial = {
               val t0 = System.nanoTime()
               val t0Add = stats.getAdd
               val t0Mul = stats.getMul
@@ -1067,10 +1067,10 @@ final case class LagDstrContext(@transient sc: SparkContext,
               val t12 = t2 - t1
               // for profiling
               println(("mDm: A: updatedPartial for (r,c): >( %s , %s ), partition: > %s <, contributingIndex: > %s <;" +
-                "mTm: t: > %s <, mflops: > %6.3e <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
+                "mTm: t: >( %s , %s )<, mflops: > %6.3e <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
                 "zip: t: > %s <").format(
                   r, c, pbPartitioner.getPartition(Tuple2(r, c)), contributingIndex,
-                  t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul),
+                  t01, LagUtils.pow2Bound(t01), mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul),
                   t12))
               // ****
               // begin test
@@ -1088,17 +1088,17 @@ final case class LagDstrContext(@transient sc: SparkContext,
                 val mflopsi = (t01Add + t01Mul).toDouble / t01.toDouble
                 println("mXm: B: for (r,c): >( %s , %s ), mFlop ratio : >%.5f<".format(r, c, mflops / mflopsi))
                 println(("mXm: B: updatedPartial for (r,c): >( %s , %s ), partition: > %s <, contributingIndex: > %s <;" +
-                  "mTm: t: > %s <, mflops: > %6.3e <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
+                  "mTm: t: >( %s , %s )<, mflops: > %6.3e <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
                   "zip: t: > %s <").format(
                     r, c, pbPartitioner.getPartition(Tuple2(r, c)), contributingIndex,
-                    t01, mflopsi, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul),
+                    t01, LagUtils.pow2Bound(t01), mflopsi, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul),
                     t12))
               }
               updatedPartial
             }
 ////            } else { //****//
 //            }
-            val updatedPartial = {
+            val updatedPartial02 = {
               val t0 = System.nanoTime()
               val t0Add = stats.getAdd
               val t0Mul = stats.getMul
@@ -1129,10 +1129,10 @@ final case class LagDstrContext(@transient sc: SparkContext,
               val t12 = t2 - t1
               // for profiling
               println(("mDm: C: updatedPartial for (r,c): >( %s , %s ), partition: > %s <, contributingIndex: > %s <;" +
-                "mTm: t: > %s <, mflops: > %6.3e <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
+                "mTm: >( %s , %s )<, mflops: > %6.3e <, adds: >( %s , %s )<, muls: >( %s , %s )<;" +
                 "zip: t: > %s <").format(
                   r, c, pbPartitioner.getPartition(Tuple2(r, c)), contributingIndex,
-                  t01, mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul),
+                  t01, LagUtils.pow2Bound(t01), mflops, t01Add, LagUtils.pow2Bound(t01Add), t01Mul, LagUtils.pow2Bound(t01Mul),
                   t12))
               val t01SS = stats.getSS - t0SS
               val t01SD = stats.getSD - t0SD

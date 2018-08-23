@@ -447,59 +447,6 @@ object GpiOps {
       a: GpiAdaptiveVector[GpiAdaptiveVector[T1]],
       u: GpiAdaptiveVector[GpiAdaptiveVector[T2]],
       statsOption: Option[GpiAdaptiveVector.Stat] = None): GpiAdaptiveVector[GpiAdaptiveVector[T4]] = {
-    
-//    def intersect[T](ths: Array[Int], thsV: Array[T], that: Array[Int], thatV: Array[T]): List[(T,T)] = {
-//      val occ = occCounts(that.seq)
-//      val b = new scala.collection.mutable.ListBuffer[(T,T)]() // newBuilder
-//      for (x <- ths) {
-//        val ox = occ(x)  // Avoid multiple map lookups
-//        if (ox > 0) {
-////          b += x
-//          b += Tuple2(thsV(x), thatV(x))
-//          occ(x) = ox - 1
-//        }
-//      }
-//      b.result()
-//    }
-//    def intersect[T](ths: Array[Int], that: Array[Int]): List[(Int, Int)] = {
-//      val occ = occCounts(that.seq)
-//      val b = new scala.collection.mutable.ListBuffer[(Int, Int)]() // newBuilder
-//      for (x <- ths.zipWithIndex) {
-//        val ox = occ(x._1)  // Avoid multiple map lookups
-//        if (ox > -1) {
-//          b += Tuple2(x._2, ox)
-//          occ(x._1) = -1
-//        }
-//      }
-//      b.result()
-//    }
-    def intersect[@spec(Int) T1: ClassTag, @spec(Int) T2: ClassTag, @spec(Int) T3: ClassTag, @spec(Int) T4: ClassTag](
-      f: (T3, T4) => T4,
-      g: (T2, T1) => T3,
-      zero: T4,
-      ths: Array[Int], thsV: Array[T1], that: Array[Int], thatV: Array[T2]): T4 = {
-      val occ = occCounts(that.seq)
-      var res = zero
-      for (x <- ths.zipWithIndex) {
-        val ox = occ(x._1)  // Avoid multiple map lookups
-        if (ox > -1) {
-          res = f(g(thatV(ox), thsV(x._2)), res)
-          occ(x._1) = -1
-        }
-      }
-      res
-    }
-  
-//    def occCounts[B](sq: Seq[B]): scala.collection.mutable.Map[B, Int] = {
-//      val occ = new scala.collection.mutable.HashMap[B, Int] { override def default(k: B) = 0 }
-//      for (y <- sq) occ(y) += 1
-//      occ
-//    }
-    def occCounts[B, T](sq: Seq[B]): scala.collection.mutable.Map[B, Int] = {
-      val occ = new scala.collection.mutable.HashMap[B, Int] { override def default(k: B) = -1 }
-      for (y <- sq.zipWithIndex) occ(y._1) = y._2
-      occ
-    }
     var SS = 0
     var SD = 0
     var DD = 0
@@ -541,17 +488,6 @@ object GpiOps {
             case (uSparse: GpiSparseVector[T1], vSparse: GpiSparseVector[T2]) => {
               SS += 1
               //****
-//              val occ = occCounts(vSparse.rv._1.elems)
-//              var res = zero
-//              for (x <- uSparse.rv._1.elems.zipWithIndex) {
-//                val ox = occ(x._1)  // Avoid multiple map lookups
-//                if (ox > -1) {
-//                  res = f(g(vSparse.rv._2.elems(ox), uSparse.rv._2.elems(x._2)), res)
-////                  occ(x._1) = -1
-//                }
-//              }
-//              res
-              //****
               var res = zero
               if (uSparse.rv._1.elems.size < vSparse.rv._1.elems.size) {
                 for (x <- uSparse.rv._1.elems.zipWithIndex) {
@@ -572,16 +508,12 @@ object GpiOps {
               }
               res
               //****
-//              val occ = occCounts(uSparse.rv._1.elems)
-////              print("S%s-%s".format(uSparse.rv._1.elems.size,vSparse.rv._1.elems.size))
 //              var res = zero
-//              for (x <- vSparse.rv._1.elems.zipWithIndex) {
-//                val ox = occ(x._1)  // Avoid multiple map lookups
-//                if (ox > -1) {
-//                  res = f(g(uSparse.rv._2.elems(ox), vSparse.rv._2.elems(x._2)), res)
-//                  opsTot += 1
-////                  occ(x._1) = -1
-//                }
+//              var i = 0
+//              while(i<2){
+//                res = zero
+//                opsTot += 1
+//                i += 1
 //              }
 //              res
               //****
@@ -590,19 +522,6 @@ object GpiOps {
 ////              val test = uSparse.rv._1.elems.intersect(vSparse.rv._1.elems)
 //              for (e <- test) {
 //                opsTot += 1
-//              }
-//              res
-              //****
-//              val res = intersect(f, g, zero, uSparse.rv._1.elems, uSparse.rv._2.elems, vSparse.rv._1.elems, vSparse.rv._2.elems)
-//              var res = zero
-//              val intersection = intersect(uSparse.rv._1.elems, vSparse.rv._1.elems)
-//              val intersection = intersect(vSparse.rv._1.elems, uSparse.rv._1.elems)
-//              for (e <- intersection) {
-////                res = f(g(uSparse.rv._2.elems(e._1), vSparse.rv._2.elems(e._2)), res)
-//                res = f(g(uSparse.rv._2.elems(e._2), vSparse.rv._2.elems(e._1)), res)
-//                opsTot += 1
-////                res = zero
-////                res = f(g(uSparse.rv._2(e), vSparse.rv._2(e)), res)
 //              }
 //              res
               //****
@@ -703,25 +622,25 @@ object GpiOps {
             }
           }
         // ****
-        //                    bsx(ix) = zero // DEBUG turn off
+//                            bsx(ix) = zero // DEBUG turn off
         if (bsx(ix) != zero) newDenseCountx += 1
         ix += 1
       }
-      bs(i) = // addded
-        if (newDenseCountx < dbsx.length * A.threshold) {
-          val x = GpiSparseVector(
-            GpiAdaptiveVector.toSparseBuffers(GpiBuffer(bsx), zero, newDenseCountx),
-            zero,
-            dbsx.length,
-            A.threshold)
-          //                    print("S(%s,%s)%s".format(r, c, kx))
-          x
-        } else {
-          val x = GpiDenseVector(GpiBuffer(bsx), zero, newDenseCountx, A.threshold)
-          //                    print("D%s".format(x.length))
-          x
-        }
-      //          bs(i) = vSparse // DEBUG turn off mTv
+//      bs(i) = // addded
+//        if (newDenseCountx < dbsx.length * A.threshold) {
+//          val x = GpiSparseVector(
+//            GpiAdaptiveVector.toSparseBuffers(GpiBuffer(bsx), zero, newDenseCountx),
+//            zero,
+//            dbsx.length,
+//            A.threshold)
+//          //                    print("S(%s,%s)%s".format(r, c, kx))
+//          x
+//        } else {
+//          val x = GpiDenseVector(GpiBuffer(bsx), zero, newDenseCountx, A.threshold)
+//          //                    print("D%s".format(x.length))
+//          x
+//        }
+                bs(i) = vSparse // DEBUG turn off mTv
       if (bs(i) != vSparse) newDenseCount += 1
       //                println("B%s".format(bs(i).length))
       i += 1

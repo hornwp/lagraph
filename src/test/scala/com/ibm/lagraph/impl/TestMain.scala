@@ -1656,22 +1656,301 @@ object TestMain {
       val re = (List(2, 7, 9), List(1, 2, 1))
     }
   }
+  // ********
+  import scala.annotation.tailrec
+  //  test("xxx: yyy: zzz") {
+  def xxx_yyy_zzz(): Unit = {
+    val DEBUG = true
+    val sparseValue = 0
+    
+    
+    
+    
+    // ********
+    def csrToMap[T: ClassTag](
+        ia: GpiBuffer[Int],
+        ja: GpiBuffer[Int],
+        va: GpiBuffer[T]): Map[(Int, Int), T] = {
+      val mm: MMap[(Int, Int), T] = MMap()
+      @tailrec
+      def unPackMap(
+          ia: GpiBuffer[Int],
+          ja: GpiBuffer[Int],
+          va: GpiBuffer[T],
+          row: Int,
+          nnz: Int,
+          mm: MMap[(Int, Int), T]): MMap[(Int, Int), T] = {
+        @tailrec
+        def unPackRow(
+            ia: GpiBuffer[Int],
+            ja: GpiBuffer[Int],
+            va: GpiBuffer[T],
+            row: Int,
+            nnz: Int,
+            mm: MMap[(Int, Int), T]): MMap[(Int, Int), T] = {
+          // unPackRow
+          if (nnz == ia(row + 1)) {
+            mm
+          } else {
+            mm((row, ja(nnz))) = va(nnz)
+            unPackRow(row, nnz + 1, ia, ja, va, mm)
+          }
+        }
+        // unPackMap
+        if (mm.size == ia.size) {
+          mm
+        } else {
+          val nxtMm = unPackRow(row, nnz, ia, ja, va, mm)
+          unPackMap(row + 1, nnz, ia, ja, va, nxtMm)
+        }
+      }
+      mm.toMap
+    }
+    // ********
+    
 
+    def csrFromMap[T: ClassTag](
+        dim: (Int, Int),
+        mMap: Map[(Int, Int), T]): (GpiBuffer[Int], GpiBuffer[Int], GpiBuffer[T]) = {
+        def ksort(l:(Int, Int) ,r:(Int, Int)):Boolean = {
+          if (l._1 != r._1) l._1 < r._1 else l._2 < r._2
+        }
+        val sortedMap = mMap.toSeq.sortWith{(l,r) => ksort(l._1,r._1)}
+        @tailrec
+        def compressSortedMap(
+            sortedMap: Seq[((Int, Int), T)],
+            nnz: Int,
+            row: Int,  
+            ia: List[Int],
+            ja: List[Int],
+            va: List[T]): (List[Int], List[Int], List[T]) = {
+          if (nnz == sortedMap.size) {
+            (ia, ja, va)
+          } else {
+            val (oRow, oIa) = if (row != sortedMap(nnz)._1._1) {
+              val nRowToIncrement = sortedMap(nnz)._1._1 - row
+              val nNa = ja.size :: List.fill(nRowToIncrement - 1)(ia(0)) ::: ia
+               // number of rows to skip
+              (row + nRowToIncrement, nNa) 
+            } else (row, ia)
+            val oJa = sortedMap(nnz)._1._2 :: ja
+            val oVa = sortedMap(nnz)._2 :: va
+            compressSortedMap(sortedMap, nnz +1, oRow, oIa, oJa, oVa)
+          }
+        }
+        val (ia, ja, va) = compressSortedMap(sortedMap, 0, 0, List(0), List[Int](), List[T]())
+        (GpiBuffer(ia.reverse.toArray), GpiBuffer(ja.reverse.toArray), GpiBuffer(va.reverse.toArray))
+    }
+    // ********
+    def csrFromSeqOfSeq[T: ClassTag](
+        vMatrix: Seq[Seq[T]],
+        sparseValue: T): (GpiBuffer[Int], GpiBuffer[Int], GpiBuffer[T]) = {
+      val dim = (vMatrix.size, vMatrix(0).size)
+      @tailrec
+      def compressRow(
+          vMatrix: Seq[Seq[T]],
+          row: Int,
+          ia: List[Int],
+          ja: List[Int],
+          va: List[T]): (List[Int], List[Int], List[T]) = {
+        @tailrec
+        def compressCol(vRow: Seq[T], col: Int, ja: List[Int], va: List[T]): (List[Int], List[T])  = {
+          // compressCol
+          if (col == dim._2) {
+            (ja, va)
+          } else if (vRow(col) != sparseValue) {
+            val oJa = col :: ja
+            val oVa = vRow(col) :: va
+            compressCol(vRow, col + 1, oJa, oVa)
+          } else {
+            compressCol(vRow, col + 1, ja, va)
+          }
+        }
+        // compressRow
+        if (row == dim._1) {
+          (ia, ja, va)
+        } else {
+          val (oJa, oVa) = compressCol(vMatrix(row), 0, ja, va)
+          val oIa = if (oJa.size > ja.size) oJa.size :: ia else ia
+          compressRow(vMatrix, row + 1, oIa, oJa, oVa)
+        }
+      }
+      val (ia, ja, va) = compressRow(vMatrix, 0, List(0), List[Int](), List[T]())
+      (GpiBuffer(ia.reverse.toArray), GpiBuffer(ja.reverse.toArray), GpiBuffer(va.reverse.toArray))
+    }
+    
+    
+//    @tailrec
+    def procRow1(dim: (Int, Int, Int), nnz2: Int, ia2: Int,
+        IA2: GpiBuffer[Int], JA2: GpiBuffer[Int], VA2: GpiBuffer[Double],
+        IA1: GpiBuffer[Int], JA1: GpiBuffer[Int], VA1: GpiBuffer[Double],
+        IAR: List[Int], JAR: List[Int], VAR: List[Double]): (List[Int], List[Int], List[Double]) = {
+      @tailrec
+      def procCol1(dim: (Int, Int, Int), nnz2: Int, ia2: Int,
+          IA2: GpiBuffer[Int], JA2: GpiBuffer[Int], VA2: GpiBuffer[Double],
+          IA1: GpiBuffer[Int], JA1: GpiBuffer[Int], VA1: GpiBuffer[Double],
+          IAR: List[Int], JAR: List[Int], VAR: List[Double]): (Int, List[Int], List[Int], List[Double]) = {
+        @tailrec
+        def procRow2(dim: (Int, Int, Int), nnz2: Int, nnz1: Int, ia2: Int, ia1: Int,
+            IA2: GpiBuffer[Int], JA2: GpiBuffer[Int], VA2: GpiBuffer[Double],
+            IA1: GpiBuffer[Int], JA1: GpiBuffer[Int], VA1: GpiBuffer[Double],
+            IAR: List[Int], JAR: List[Int], VAR: List[Double]): (Int, List[Int], List[Int], List[Double]) = {
+          @tailrec
+          def procCol2(dim: (Int, Int, Int), nnz2: Int, nnz1: Int, ia2: Int, sum: Double,
+              IA2: GpiBuffer[Int], JA2: GpiBuffer[Int], VA2: GpiBuffer[Double],
+              IA1: GpiBuffer[Int], JA1: GpiBuffer[Int], VA1: GpiBuffer[Double]): (Int, Int, Double) = {
+            // procCol2
+            if (nnz2 == IA2(ia2) || nnz1 == IA1(ia1)) {
+              println("procCol2: return: ia2 = >%s<, nnz2 = >%s<, IA2(ia2) = >%s<, ia1 = >%s<, nnz1 = >%s<, IA1(ia1) = >%s<".format(ia2, nnz2, IA2(ia2), ia1, nnz1, IA1(ia1)))
+              (nnz2, nnz1, sum)
+            }
+            else if (JA1(nnz1) < JA2(nnz2)) {
+              println("procCol2: incr nnz1: ia2 = >%s<, nnz2 = >%s<, IA2(ia2) = >%s<, ia1 = >%s<, nnz1 = >%s<, IA1(ia1) = >%s<; JA1(nnz1) = >%s<, VA1(nnz1) = >%s<, JA2(nnz2) = >%s<, VA2(nnz2) = >%s<".format(ia2, nnz2, IA2(ia2), ia1, nnz1, IA1(ia1), JA1(nnz1), VA1(nnz1), JA2(nnz2), VA2(nnz2)))
+              procCol2(dim, nnz2, nnz1 + 1, ia2, sum, IA2, JA2, VA2, IA1, JA1, VA1)
+            } else if (JA2(nnz2) < JA1(nnz1)){
+              println("procCol2: incr nnz2: ia2 = >%s<, nnz2 = >%s<, IA2(ia2) = >%s<, ia1 = >%s<, nnz1 = >%s<, IA1(ia1) = >%s<; JA1(nnz1) = >%s<, VA1(nnz1) = >%s<, JA2(nnz2) = >%s<, VA2(nnz2) = >%s<".format(ia2, nnz2, IA2(ia2), ia1, nnz1, IA1(ia1), JA1(nnz1), VA1(nnz1), JA2(nnz2), VA2(nnz2)))
+              procCol2(dim, nnz2 + 1, nnz1, ia2, sum, IA2, JA2, VA2, IA1, JA1, VA1)
+            } else {
+              println("procCol2: match: ia2 = >%s<, nnz2 = >%s<, IA2(ia2) = >%s<, ia1 = >%s<, nnz1 = >%s<, IA1(ia1) = >%s<; JA1(nnz1) = >%s<, VA1(nnz1) = >%s<, JA2(nnz2) = >%s<, VA2(nnz2) = >%s<".format(ia2, nnz2, IA2(ia2), ia1, nnz1, IA1(ia1), JA1(nnz1), VA1(nnz1), JA2(nnz2), VA2(nnz2)))
+              procCol2(dim, nnz2 + 1, nnz1 + 1, ia2, sum + 0.0, IA2, JA2, VA2, IA1, JA1, VA1)
+            }
+          }
+          // procRow2
+          println("procRow2: ia2 = >%s<, ia1 = >%s<".format(ia2, ia1))
+          if (ia1 == (dim._1 + 1)) {
+            println("return procRow2")
+            (nnz2, IAR, JAR, VAR)
+          } else {
+            val (nnz2Next, nnz1Next, sumFinal) = procCol2(dim, nnz2, nnz1, ia2, 0.0, IA2, JA2, VA2, IA1, JA1, VA1)
+            // do something w/ sumFinal
+            println("sumFinal: (r,c): >(%s,%s)<".format(ia2-1,ia1-1))
+            val nextIAR = 0 :: IAR
+            val nextJAR = 0 :: JAR
+            val nextVAR = 0.0 :: VAR
+            println("For ia2: >%s<, BUMP ia1: >%s< -> >%s<".format(ia2, ia1, ia1 +1))
+//            procRow2(n, nnz2Next, nnz1Next, ia2, ia1 + 1, IA2, JA2, VA2, IA1, JA1, VA1, nextIAR, nextJAR, nextVAR) // broke?
+            procRow2(dim, IA2(ia2 - 1), IA1(ia1), ia2, ia1 + 1, IA2, JA2, VA2, IA1, JA1, VA1, nextIAR, nextJAR, nextVAR)
+          }
+        }
+        // procCol1
+        if (ia2 == (dim._3 + 1)) {
+//          println("procCol1: return: nnz2 = >%s<, ia2 = >%s<, IA2(ia2) = >%s<".format(nnz2, ia2, IA2(ia2)))
+          println("procCol1: return: nnz2 = >%s<, ia2 = >%s<<".format(nnz2, ia2))
+          (nnz2, IAR, JAR, VAR)
+        } else {
+          println("procCol1: next: nnz2 = >%s<, ia2 = >%s<, IA2(ia2) = >%s<".format(nnz2, ia2, IA2(ia2)))
+          val (nnz2Next, nextIAR, nextJAR, nextVAR) = procRow2(dim, nnz2, 0, ia2, 1, IA2, JA2, VA2, IA1, JA1, VA1, IAR, JAR, VAR)
+          println("BUMP ia2: >%s< -> >%s<".format(ia2, ia2+1))
+          procCol1(dim, IA2(ia2), ia2 + 1, IA2, JA2, VA2, IA1, JA1, VA1, nextIAR, nextJAR, nextVAR)
+        }
+      }
+      // procRow1
+      println("procRow1: ia2 = >%s<".format(ia2))
+//      if (ia2 == n) {
+//        println("return procRow1")
+//        (IAR, JAR, VAR)
+//      } else {
+        val (nnz2Next, nextIAR, nextJAR, nextVAR) = procCol1(dim, nnz2, ia2, IA2, JA2, VA2, IA1, JA1, VA1, IAR, JAR, VAR)
+//        procRow1(n, nnz2Next, ia2 + 1, IA2, JA2, VA2, IA1, JA1, VA1, nextIAR, nextJAR, nextVAR) // broke?
+//        procRow1(n, IA2(ia2), ia2 + 1, IA2, JA2, VA2, IA1, JA1, VA1, nextIAR, nextJAR, nextVAR)
+//      }
+      (nextIAR, nextJAR, nextVAR)
+    }
+    // [aD x bD] * [bD x cD]
+    val aD = 4
+    val bD = 4
+    val cD = 4
+    val dim = (4, 4, 4)
+    
+    // 0 0 0 0
+    // 5 8 0 0
+    // 0 0 3 0
+    // 0 6 0 0
+    
+    // transpose
+    // 0 5 0 0
+    // 0 8 0 6
+    // 0 0 3 0
+    // 0 0 0 0
+    // ref
+    val refA = Vector(
+        Vector(0.0, 0.0, 0.0, 0.0),
+        Vector(5.0, 8.0, 0.0, 0.0),
+        Vector(0.0, 0.0, 3.0, 0.0),
+        Vector(0.0, 6.0, 0.0, 0.0))
+    val refB = Vector(
+        Vector(0.0, 0.0, 0.0, 0.0),
+        Vector(5.0, 8.0, 0.0, 0.0),
+        Vector(0.0, 0.0, 3.0, 0.0),
+        Vector(0.0, 6.0, 0.0, 0.0))
+    val refC = mTm(refA, refB).transpose
+
+                            if (DEBUG) {
+                              println("refA")
+                              println(refA)
+                              println("refB")
+                              println(refB)
+                              println("refC")
+                              println(refC)
+                            }
+    
+    val (iax, jax, vax) = csrFromSeqOfSeq(refA, 0.0)
+
+                            if (DEBUG) {
+                              println("iax")
+                              println(iax)
+                              println("jax")
+                              println(jax)
+                              println("vax")
+                              println(vax)
+                            }
+    val IA1 = GpiBuffer(Array(0, 0, 2, 3, 4))
+    val JA1 = GpiBuffer(Array(0, 1, 2, 1))
+    val VA1 = GpiBuffer(Array(5.0, 8.0, 3.0, 6.0))
+    
+    val IA2 = GpiBuffer(Array(0, 1, 3, 4, 4))
+    val JA2 = GpiBuffer(Array(1, 1, 3, 2))
+    val VA2 = GpiBuffer(Array(5.0, 8.0, 6.0, 3.0))
+
+                            if (DEBUG) {
+                              println("IA2")
+                              println(IA1)
+                              println("JA2")
+                              println(JA1)
+                              println("VA2")
+                              println(VA1)
+                              println("IA1")
+                              println(IA2)
+                              println("JA1")
+                              println(JA2)
+                              println("VA1")
+                              println(VA2)
+                            }
+
+    val (finalIAR, finalJAR, finalVAR) = procRow1(dim, 0, 1, IA1, JA1, VA1, IA2, JA2, VA2, List[Int](), List[Int](), List[Double]())
+//    val xIAR = x._1
+//    val xJAR = x._2
+//    val xVAR = x._3
+//    throw new NotImplementedError("vToMrow: TBD")
+  }
+  
   // ********
   def main(args: Array[String]): Unit = {
-    Logger.getLogger("org").setLevel(Level.OFF)
-    Logger.getLogger("akka").setLevel(Level.OFF)
-    // settings from environment
-    val spark_home = scala.util.Properties
-      .envOrElse("SPARK_HOME", "/home/hduser/spark-1.4.1-bin-hadoop2.6")
-    println("spark_home: >%s<".format(spark_home))
-    val master = "local[1]"
-    println("master: >%s<".format(master))
-    val sc = new SparkContext(master, "TestMain")
+    
+//    Logger.getLogger("org").setLevel(Level.OFF)
+//    Logger.getLogger("akka").setLevel(Level.OFF)
+//    // settings from environment
+//    val spark_home = scala.util.Properties
+//      .envOrElse("SPARK_HOME", "/home/hduser/spark-1.4.1-bin-hadoop2.6")
+//    println("spark_home: >%s<".format(spark_home))
+//    val master = "local[1]"
+//    println("master: >%s<".format(master))
+//    val sc = new SparkContext(master, "TestMain")
+    
     //    TestMain.LagDstrContext_vZipWithIndexV3(sc)
     //    TestMain.LagDstrContext_vZipWithIndexSparseV3(sc)
     //    TestMain.LagDstrContext_mZipWithIndexSparseV3(sc)
-        TestMain.LagDstrContext_mTmV3(sc)
+    //    TestMain.LagDstrContext_mTmV3(sc)
     //    TestMain.LagDstrContext_mTvV3(sc)
     //    TestMain.LagDstrContext_vToMrowV3(sc)
     //    TestMain.LagDstrContext_transposeV3(sc)
@@ -1681,6 +1960,8 @@ object TestMain {
     //    TestMain.LagDstrContext_samsi2017static_algo2_tricnt(sc)
     //    TestMain.GpiOps_gpi_m_times_m()
     //    TestMain.gpizip_sradd_etc()
+        
+        xxx_yyy_zzz()
   }
 }
 // scalastyle:on println
